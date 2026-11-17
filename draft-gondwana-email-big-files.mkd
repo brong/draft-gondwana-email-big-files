@@ -343,11 +343,16 @@ A linked attachment can be kept in a draft, and is published once.
 ## Forwarding and Replying {#forwarding}
 
 An MUA that forwards a message with linked attachments, or replies and
-keeps them, SHOULD copy the Link-Attachment header fields and the
-matching parts of the body.  If the URL has expired, or may expire
-soon, the MUA MAY publish the file again from its own copy and give a
-new URL.  The digest is unchanged, so receiving servers that already
-have the file needn't fetch it.
+keeps them, SHOULD publish its own copy of each file ({{publishing}})
+and give the new message Link-Attachment header fields and body links
+that point to that copy.  The "cid", "size" and digests stay the same.
+This keeps the original attachment server from serving every later
+recipient ({{security}}), and the file from depending on it.
+
+When forwarding a message as a message/rfc822 body part, which can't be
+changed, the MUA SHOULD add Link-Attachment header fields for its own
+copies to the outer message.  A receiving server that has a file with
+the same digest needn't fetch it again.
 
 # Receiving {#receiving}
 
@@ -494,6 +499,18 @@ addresses, and MUST check again after each redirect.
 
 **Resource use.**  Receiving servers SHOULD limit the number and total
 size of linked attachments they fetch per message.
+
+**Denial of service.**  Someone who receives a message with linked
+attachments can resend it, or just its Link-Attachment header fields,
+to millions of recipients, each of whose servers then fetches the file
+from the original attachment server.  The same works with a "url" that
+points at any large file on any server.  Forwarding MUAs that publish
+their own copies ({{forwarding}}) avoid this for ordinary forwarding.
+Receiving servers SHOULD fetch a URL only once, and reuse the result
+for every message that names the same URL and digest, and SHOULD limit
+how fast they fetch from any one host.  Attachment servers MAY limit how
+often they serve a file, and receivers treat the refusal as a failed
+fetch ({{fetching}}).
 
 **Misleading links.**  The body links might not match the header
 fields.  An MUA that hides them and shows the verified file avoids
