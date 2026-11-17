@@ -186,8 +186,8 @@ creation-date, modification-date, read-date:
 type:
 : OPTIONAL.  The media type of the file, with any parameters, in the
   syntax of the Content-Type header field value ({{Section 5.1 of
-  MIME}}).  The default is "application/octet-stream".  It overrides
-  the Content-Type of the HTTP response.
+  MIME}}).  The default is "application/octet-stream".  The
+  Content-Type of the HTTP response is ignored.
 
 description:
 : OPTIONAL.  A description of the file, as for Content-Description
@@ -380,7 +380,8 @@ A linked attachment can be kept in a draft, and is published once.
 An MUA that forwards a message with linked attachments, or replies and
 keeps them, SHOULD publish its own copy of each file ({{publishing}})
 and give the new message Link-Attachment header fields and body links
-that point to that copy.  The "cid", "size" and digests stay the same.
+that point to that copy.  Parameters other than "url", "key" and
+"expires" stay the same.
 This keeps the original attachment server from serving every later
 recipient ({{security}}), and the file from depending on it.
 
