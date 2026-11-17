@@ -124,8 +124,8 @@ receiving server:
 # The Link-Attachment Header Field {#header}
 
 Each "Link-Attachment" header field describes one linked attachment.
-It appears only in the message header section; one in a body part MUST
-be ignored.
+It appears only in the header section of the message ({{Section 2.1 of
+MAIL}}); one in the header fields of a body part MUST be ignored.
 
 The syntax is that of Content-Disposition {{CONTENT-DISP}}, so existing
 MIME parsers can read it.  The disposition type is "attachment", or
@@ -424,7 +424,8 @@ external content, but many MUAs show it as an attachment with no link,
 and it has no digest or key.
 
 {{BIG-FILES-00}} put its header field in the body part holding the
-fallback links.  This document puts it in the message header section,
+fallback links.  This document puts it in the header section of the
+message,
 where servers can find it without parsing MIME, and DKIM covers it.
 
 # IANA Considerations {#iana}
@@ -522,7 +523,7 @@ was delivered, and hides the recipient's address.
 {:numbered="false"}
 
 * Renamed "Content-External" to "Link-Attachment", with
-  Content-Disposition syntax, in the message header section.
+  Content-Disposition syntax, in the header section of the message.
 * Added "cid", the HTML markup, and "cid" URLs that refer to linked
   attachments.
 * Added "key", for encrypted files.
