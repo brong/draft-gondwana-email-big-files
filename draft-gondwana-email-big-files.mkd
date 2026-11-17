@@ -433,9 +433,8 @@ to it.
 > Open issue: This is specific to each access protocol.  For JMAP
 > {{JMAP-MAIL}}, an Email property could list linked attachments with a
 > blobId for each, and {{BLOBEXT}} already describes blobs by digest.
-> IMAP would need a FETCH data item.  JMAP also needs a way for an MUA
-> to get proxied remote images ({{security}}).  These might be separate
-> documents.
+> IMAP would need a FETCH data item.  These might be separate
+> documents, along with a way for an MUA to get proxied remote images.
 
 An MUA whose message store doesn't do this MAY fetch the file itself,
 when the user opens it or in the background on arrival, but SHOULD NOT
@@ -553,12 +552,13 @@ attachment server and from anyone with the URL alone.
 attachment server when the user views the message or opens the file,
 the sender learns when, and from where, it happened.  An image shown
 through a "cid" URL ({{cid-urls}}) is then a "web bug"
-({{Section 9.9 of E2E-GUIDANCE}}), as is any remote image.  So a
-message store SHOULD, within the limits of {{fetching}}, fetch all
-linked attachments and remote images when the message arrives, and
-store them with the message.  MUAs SHOULD get them from the message
-store, so that nothing is fetched from the original location when the
-user views the message or opens an attachment.
+({{Section 9.9 of E2E-GUIDANCE}}).  So a message store SHOULD, within
+the limits of {{fetching}}, fetch all linked attachments when the
+message arrives, and store them with the message.  MUAs SHOULD get them
+from the message store, so that nothing is fetched from the attachment
+server when the user views the message or opens an attachment.  Remote
+images have the same problem, and a message store can proxy them in the
+same way.
 
 # Privacy Considerations {#privacy}
 
