@@ -74,94 +74,33 @@ aware clients hide the fallback links in the message body.
 
 --- middle
 
-# Introduction
+# Introduction {#intro}
 
-## Properties of attached files {#properties}
+Most email systems limit the size of messages, sometimes to as little
+as 10 megabytes, and the limits differ between systems.  So large files
+are often uploaded to a web server and sent as a link instead.  Many
+clients and services do this automatically, each in their own way.
 
-A file attached to an email message, as a MIME {{MIME}} body part, has
-some properties that users rely on, often without thinking about it:
+An attached file has properties that a link lacks:
 
-1. **It lasts as long as the message.**  Every recipient holds a copy of
-   the file inside their copy of the message.  The file remains available
-   for as long as the recipient keeps the message, no matter what the
-   sender, or the sender's service provider, later does.
+1. A copy lasts as long as the message.
+2. It can't be changed after sending.
+3. Systems that handle the message can scan it.
+4. Anyone who has the message has the file.
 
-2. **It can't be changed after sending.**  The file that the recipient
-   reads is the file that the sender sent.  If a message is cited months
-   later, as a record of what was agreed, the attachment is part of that
-   record.
+A link can stop working, the file behind it can change, it can't be
+scanned in transit, and it may need a separate login.
 
-3. **It can be scanned in transit.**  Systems that handle the message,
-   such as the receiving organisation's malware and data-loss filters,
-   can read the file before it reaches the recipient, and reject or
-   quarantine the message.
+This document defines the "Link-Attachment" header field ({{header}}),
+which gives the URL, size and digest of each file, and optionally the
+key it was encrypted with.  Receiving servers fetch, verify and scan
+the file when the message arrives ({{receiving}}), and keep it as long
+as the message ({{lifetime}}), which restores those properties.  The
+message body also includes ordinary links for clients that don't
+support this document, and markup that lets clients that do hide them
+({{html}}).
 
-4. **Having the message is having the file.**  Anyone who can read the
-   message can open the attachment.  There is no separate login, no
-   access list, and no request to the sender for permission.  Forwarding
-   the message forwards the file.
-
-## The problem with links {#problem}
-
-Most email systems limit the size of messages that they will accept, and
-the limit can be as low as 10 megabytes.  The limits differ from system
-to system, so a sender often can't know whether a large message will be
-delivered.  Meanwhile, the files that people want to send keep getting
-bigger.
-
-The common workaround is to upload the file to a web server, often a
-file-sharing service run by the sender's email provider, and to send a
-link in the body of the message.  Many mail clients and services do this
-automatically when an attachment is too large, each in their own way.
-
-A link of this kind loses every property in {{properties}}:
-
-1. The file lasts only as long as the server keeps it.  The service may
-   expire it after a few days, the sender may delete it, or the service
-   may close.
-
-2. The file at the link can be replaced after the message is sent, and
-   the recipient has no way to tell.
-
-3. Systems that handle the message see only a link.  They can't scan
-   the file, and typically don't try.
-
-4. Access may depend on a login or an access list held by the server,
-   rather than on possession of the message.
-
-And because each service builds its own links and its own web pages, a
-receiving client can't do better than display the link.
-
-## This document {#this-document}
-
-This document defines a way for the sender to describe a file stored on
-a web server, in a structured form that receiving systems can act on.
-The "Link-Attachment" header field ({{header}}) names each file, and
-gives the URL from which it can be fetched, its size, a digest of its
-content, and optionally a key with which it was encrypted.  This lets a
-receiving system restore the properties of an attached file:
-
-1. A receiving server fetches the file when the message arrives, and
-   stores it for as long as it stores the message ({{lifetime}}), so
-   the file outlives the sender's copy.
-
-2. The digest lets the receiving system check that the file it fetched
-   is the file that the sender described, so that a changed file is
-   detected ({{fetching}}).
-
-3. A receiving server can fetch the file, and decrypt it with the key in
-   the message, during its normal content scanning ({{scanning}}).
-
-4. The URL and key are all that is needed to fetch the file
-   ({{publishing}}).  Having the message is having the file.
-
-The message body also includes ordinary links to the files, so that
-recipients whose clients don't support this document can still download
-them.  {{html}} defines markup that lets clients which do support it hide
-those links and show the files as attachments instead.
-
-This document replaces {{BIG-FILES-00}}.  The differences are listed in
-{{changes}}.
+This document replaces {{BIG-FILES-00}}; see {{changes}}.
 
 # Conventions and Definitions
 
@@ -420,7 +359,7 @@ made public.  They SHOULD each contain at least 128 bits of
 cryptographically random data, as a capability URL {{CAPABILITY-URLS}}.
 Possession of the URL then grants access to the file, and possession of
 the message grants possession of the URL.  This gives linked attachments
-the fourth property in {{properties}}.
+the fourth property in {{intro}}.
 
 The attachment server MUST respond to a GET request for the URL in the
 "url" parameter without authentication, cookies, or any other state not
@@ -562,7 +501,7 @@ This design meets the following requirements:
 
 * Linked attachments can be kept in drafts, forwarded and replied to.
 
-* Receiving systems can restore the properties in {{properties}}.
+* Receiving systems can restore the properties in {{intro}}.
 
 The message/external-body media type {{MEDIA-TYPES}} also refers to
 external content, but many widely deployed MUAs display it as an
