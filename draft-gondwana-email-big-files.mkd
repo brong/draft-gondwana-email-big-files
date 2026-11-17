@@ -246,35 +246,55 @@ type:
   Content-Type of the HTTP response does not override this value.
 
 key:
-: OPTIONAL.  The key with which the file was encrypted, encoded in
-  base64 {{BASE64}} with padding.  If this parameter is present, the
-  "enc" parameter MUST also be present.
-
-enc:
-: OPTIONAL.  The encryption scheme applied to the file before it was
-  stored on the attachment server.  The only value defined by this
-  document is "aes128gcm", meaning that the content fetched from the URL
-  is in the format defined in {{Section 2 of ECE}}, and "key" is the
-  16-octet input keying material (IKM).  If "enc" is present without
-  "key", or has a value that the receiver doesn't support, the receiver
-  can't decrypt the file, and MUST treat the linked attachment as
-  unavailable.
+: OPTIONAL.  The encryption algorithm and key with which the file was
+  encrypted before it was stored on the attachment server, in the
+  format defined in {{key-format}}.  If absent, the file is stored
+  unencrypted.
 
 expires:
 : OPTIONAL.  The date and time, in the "date-time" syntax of {{MAIL}},
   until which the sender intends the file to be available from the URL.
   The file might remain available after this time, or vanish before it.
 
-Although "aes128gcm" is defined as a content coding for HTTP, here it
+## Key Format {#key-format}
+
+A key is written as the name of an encryption algorithm, a colon, and
+the key material encoded in base64url {{BASE64}} without padding:
+
+~~~ abnf
+key-value       = enc-alg ":" key-material
+enc-alg         = 1*( %x61-7A / DIGIT / "-" )
+                  ; lowercase name from the "Link-Attachment
+                  ; Encryption Algorithms" registry
+key-material    = 1*( ALPHA / DIGIT / "-" / "_" )
+                  ; base64url without padding
+~~~
+
+The algorithm name comes from the "Link-Attachment Encryption
+Algorithms" registry ({{iana-enc}}), which defines, for each algorithm,
+the format of the stored file and the length and meaning of the key
+material.  The same format is used in the "key" parameter and in the
+download link ({{body}}), and contains only characters that need no
+escaping in a URI query component.
+
+This document defines one algorithm, "aes128gcm": the content fetched
+from the URL is in the format defined in {{Section 2 of ECE}}, and the
+key material is the 16-octet input keying material (IKM).  Although
+"aes128gcm" is also the name of an HTTP content coding, here it
 describes the stored file itself.  The attachment server serves the
 encrypted file as its content, with no Content-Encoding header field
 for the encryption, and the receiver decrypts it after fetching.  No
 content coding negotiation is involved.
 
+If the algorithm is one that the receiver doesn't support, or the key
+material is not of the length the algorithm requires, the receiver
+can't decrypt the file, and MUST treat the linked attachment as
+unavailable.
+
 {:aside}
-> Open issue: Is "aes128gcm" the right single choice?  It is
-> already specified, is designed for streaming, and doesn't require the
-> whole file to be held in memory to decrypt it.
+> Open issue: Is "aes128gcm" the right single initial algorithm?  It
+> is already specified, is designed for streaming, and doesn't require
+> the whole file to be held in memory to decrypt it.
 
 ## Formal Syntax {#abnf}
 
@@ -291,7 +311,7 @@ la-disposition  = "attachment" / extension-token
 
 la-parameter    = cid-param / url-param / size-param /
                   digest-param / filename-param / type-param /
-                  key-param / enc-param / expires-param /
+                  key-param / expires-param /
                   other-param
 
 cid-param       = "cid" "=" value
@@ -312,9 +332,7 @@ type-param      = "type" "=" value
                   ; value is type "/" subtype
 
 key-param       = "key" "=" value
-                  ; value is base64 with padding
-
-enc-param       = "enc" "=" value
+                  ; value is key-value
 
 expires-param   = "expires" "=" quoted-string
                   ; content is date-time
@@ -335,7 +353,7 @@ Link-Attachment: attachment;
     url="https://files.example.com/la/
          Hq3Ld9YtW2xKq8vZp0aN5uFbE7cJr1sM";
     digest-sha-256="X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=";
-    enc="aes128gcm"; key="9Mzuq2AvtfQJxwuIzYB4Gg==";
+    key="aes128gcm:9Mzuq2AvtfQJxwuIzYB4Gg";
     expires="Thu, 17 Dec 2026 09:15:00 +0000"
 ~~~
 
@@ -350,7 +368,10 @@ This download link is not, in general, the URL in the "url" parameter.
 The "url" parameter gives the file as stored, which may be encrypted;
 the download link leads to the file as the recipient wants it.  The
 attachment server needs the key to decrypt the file, so the download
-link SHOULD carry the key, for example in its query component.  See
+link SHOULD carry the key, in the format of {{key-format}}, for example
+as the value of a query parameter.  The attachment server chooses the
+structure of its own URLs; including the algorithm name means that it
+can change algorithms without changing that structure.  See
 {{security}} for the consequences.
 
 A message with linked attachments SHOULD have an HTML {{HTML}} body
@@ -375,7 +396,8 @@ attribute contains "link-attachments".
   <p>Bron Gondwana shared a file with you:</p>
   <div class="link-attachment"
        id="a1.20261117T091500Z@mail.example.com">
-<a href="https://files.example.com/d/pR7wQx?k=9Mzuq2AvtfQJxwuIzYB4Gg"
+<a href=
+"https://dl.example/pR7wQx?k=aes128gcm:9Mzuq2AvtfQJxwuIzYB4Gg"
 >site-survey.mp4</a> (700 MB)
   </div>
 </div>
@@ -476,7 +498,7 @@ request to the URL in the "url" parameter.
   "aes128gcm", the overhead determined from the record size in the
   header of the encrypted content.
 
-The client then decrypts the content, if "enc" is present, and checks
+The client then decrypts the content, if "key" is present, and checks
 that its size matches the "size" parameter and that its digest matches
 every "digest-*" parameter whose algorithm the client supports.  If the
 client supports none of the algorithms, or any check fails, the linked
@@ -602,13 +624,37 @@ entries are:
 | digest-* | Digest of the file, by hash algorithm | {{params}} |
 | filename | Suggested file name | {{params}} |
 | type | Media type of the file | {{params}} |
-| key | Key with which the file was encrypted | {{params}} |
-| enc | Encryption scheme | {{params}} |
+| key | Encryption algorithm and key | {{params}} |
 | expires | Time until which the file is intended to be available | {{params}} |
 
-{:aside}
-> Open issue: Does "enc" need a registry of its own, or is it enough
-> for a new scheme to be defined in a document that registers nothing?
+## Link-Attachment Encryption Algorithms {#iana-enc}
+
+IANA is asked to create a "Link-Attachment Encryption Algorithms"
+registry.  New entries are added under the Specification Required
+policy.  Names consist of lowercase ASCII letters, digits and hyphens.
+Each entry has:
+
+Name:
+: The algorithm name, as used in the key format ({{key-format}}).
+
+Key length:
+: The length of the key material in octets.
+
+Description:
+: A brief description, including the format of the stored file.
+
+Reference:
+: The document that defines how the file is encrypted and decrypted.
+
+The designated expert checks that the specification defines the stored
+format and the key completely, and that the algorithm provides
+authenticated encryption.
+
+The initial entry is:
+
+| Name | Key length | Description | Reference |
+|---|---|---|---|
+| aes128gcm | 16 | AES-128-GCM, in the format of {{Section 2 of ECE}} | {{key-format}} of this document |
 
 # Security Considerations {#security}
 
@@ -694,7 +740,9 @@ message was displayed.
 
 * Added the "cid" parameter, and the HTML markup that uses it.
 
-* Added the "key" and "enc" parameters, for encrypted files.
+* Added the "key" parameter, which names an encryption algorithm from
+  a new registry and gives the key, for encrypted files.  The same
+  format is used in download links.
 
 * Made "size" and "digest-sha-256" required, and took digest algorithm
   names from the HTTP Digest Fields registry.
