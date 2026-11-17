@@ -22,6 +22,7 @@ author:
     email: alexey.melnikov@isode.com
 
 normative:
+    CID: RFC2392
     ABNF: RFC5234
     MIME: RFC2045
     MIME-PARAM: RFC2231
@@ -42,7 +43,6 @@ normative:
 
 informative:
     MEDIA-TYPES: RFC2046
-    CID: RFC2392
     MAIL-ARCH: RFC5598
     DKIM: RFC6376
     JMAP-MAIL: RFC8621
@@ -125,8 +125,9 @@ It appears only in the message header section; one in a body part MUST
 be ignored.
 
 The syntax is that of Content-Disposition {{CONTENT-DISP}}, so existing
-MIME parsers can read it.  The disposition type is "attachment", and
-receivers MUST treat unknown types as "attachment".
+MIME parsers can read it.  The disposition type is "attachment", or
+"inline" for a file that the HTML body shows in place ({{cid-urls}}).
+Receivers MUST treat unknown types as "attachment".
 
 ## Parameters {#params}
 
@@ -137,10 +138,10 @@ encoding, for long values and for non-ASCII file names.
 
 cid:
 : REQUIRED.  An identifier, with the syntax of id-left "@" id-right
-  from {{MAIL}}.  It MUST be unique within the message, and SHOULD be
-  globally unique, like a Content-ID {{CID}}.  It links the header field
-  to the HTML markup ({{html}}), and stays the same when the message is
-  forwarded.
+  from {{MAIL}}.  It MUST be unique within the message, MUST NOT equal
+  any Content-ID ({{Section 7 of MIME}}) in the message, and SHOULD be
+  globally unique.  The HTML body refers to the file by it ({{html}},
+  {{cid-urls}}), and it stays the same when the message is forwarded.
 
 url:
 : REQUIRED.  An absolute "https" URI {{URI}} for the file
@@ -283,6 +284,27 @@ An MUA that shows a linked attachment as an attachment SHOULD hide its
 "link-attachment" element, and SHOULD hide a "link-attachments" element
 once it has hidden every "link-attachment" element inside it.  An MUA
 MUST NOT hide a link for a file it couldn't fetch or verify.
+
+## CID URLs {#cid-urls}
+
+A "cid" URL {{CID}} in the HTML body can refer to a linked attachment,
+as it can to a body part, for example:
+
+~~~ html
+<img src="cid:a2.20261117T091500Z@mail.example.com"
+     alt="Site plan">
+~~~
+
+An MUA resolves a "cid" URL to the body part with that Content-ID, if
+there is one, and otherwise to the linked attachment with that "cid".
+It resolves it only to a verified copy of the file ({{fetching}}).  An
+MUA that would have to fetch the file from the attachment server to
+display it SHOULD treat it as remote content, under the same policy as
+remote images ({{privacy}}).
+
+MUAs that don't support this document can't resolve these URLs, and
+will show, for example, a broken image.  Senders SHOULD NOT use them
+unless they know that the recipients' MUAs support this document.
 
 # Sending {#sending}
 
@@ -486,7 +508,8 @@ was delivered, and hides the recipient's address.
 
 * Renamed "Content-External" to "Link-Attachment", with
   Content-Disposition syntax, in the message header section.
-* Added "cid" and the HTML markup.
+* Added "cid", the HTML markup, and "cid" URLs that refer to linked
+  attachments.
 * Added "key", for encrypted files.
 * Made "size" and "digest-sha-256" required.
 * Renamed "name" to "filename", and replaced the media type with
