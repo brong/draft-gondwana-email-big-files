@@ -47,8 +47,6 @@ informative:
     DKIM: RFC6376
     JMAP-MAIL: RFC8621
     BIG-FILES-00: I-D.melnikov-email-big-files
-    JWA: RFC7518
-    AEAD: RFC5116
     BLOBEXT: I-D.gondwana-jmap-blobext
     CAPABILITY-URLS:
         target: https://www.w3.org/TR/capability-urls/
@@ -62,7 +60,7 @@ informative:
 
 --- abstract
 
-Email messages carry files as attachments, but message size limits mean
+Email messages often include files as attachments, but message size limits mean
 that large files are often uploaded to a web server and sent as a link
 instead.  A link loses the properties that make an attachment useful: it
 can stop working, the file behind it can change, it can't be scanned in
@@ -271,49 +269,21 @@ key-material    = 1*( ALPHA / DIGIT / "-" / "_" )
                   ; base64url without padding
 ~~~
 
-The algorithm name is the name of an encrypting content coding from
-the IANA "HTTP Content Coding Registry" ({{Section 16.6.1 of HTTP}}).
-A content coding defines a complete format for encrypted content, not
-just a cipher.  "aes128gcm", for example, divides the content into
-fixed-size records, each encrypted with its own nonce and carrying its
-own authentication tag, and marks the last record.  A receiver can
-therefore check each record as it arrives, rather than holding the
-whole file until a single tag at the end can be checked, and can
-detect a file that has been cut short.  A large file needs these
-properties.  The registries of cipher identifiers, such as the JOSE
-"enc" values {{JWA}} and the AEAD algorithm registry {{AEAD}}, name
-only the cipher, and would leave this document to define the rest.
+The algorithm is an encrypting HTTP content coding ({{Section 16.6.1
+of HTTP}}).  A content coding defines the whole stored format, not just
+the cipher, so a receiver can verify a large file as it streams.
 
-The same format is used in the "key" parameter and in the download link
-({{body}}), and contains only characters that need no escaping in a URI
-query component.
+The only algorithm allowed is "aes128gcm" {{ECE}}.  The key material is
+the input keying material of {{Section 2.2 of ECE}}: at least 16 random
+octets.  The "keyid" field SHOULD be empty.  The attachment server
+serves the encrypted file without a Content-Encoding header field, and
+the receiver decrypts it.
 
-This document allows one algorithm, "aes128gcm" {{ECE}}.  The content
-fetched from the URL is in the format defined in {{Section 2 of ECE}},
-and the key material is the input keying material (IKM) of
-{{Section 2.2 of ECE}}.  Senders MUST generate the key material at
-random, and it MUST be at least 16 octets long.  The "keyid" field of
-the encrypted content SHOULD be empty, and receivers ignore it.
-
-Other content codings can be allowed by future documents, but only ones
-that provide authenticated encryption with a symmetric key.  A content
-coding that is not an encryption, such as "gzip", MUST NOT be used as
-an algorithm name.
-
-Although the algorithm is named by a content coding, it describes the
-stored file itself.  The attachment server serves the encrypted file as
-its content, with no Content-Encoding header field for the encryption,
-and the receiver decrypts it after fetching.  No content coding
-negotiation is involved.
-
-If the algorithm is one that the receiver doesn't support, or the key
-material is too short, the receiver can't decrypt the file, and MUST
-treat the linked attachment as unavailable.
+A receiver that doesn't support the algorithm MUST treat the linked
+attachment as unavailable.
 
 {:aside}
-> Open issue: Should the document allow other content codings now, or
-> name a way to allow them later, such as a column in the content
-> coding registry that marks encrypting codings?
+> Open issue: How should other content codings be allowed later?
 
 ## Formal Syntax {#abnf}
 
@@ -387,7 +357,7 @@ This download link is not, in general, the URL in the "url" parameter.
 The "url" parameter gives the file as stored, which may be encrypted;
 the download link leads to the file as the recipient wants it.  The
 attachment server needs the key to decrypt the file, so the download
-link SHOULD carry the key, in the format of {{key-format}}, for example
+link SHOULD include the key, in the format of {{key-format}}, for example
 as the value of a query parameter.  The attachment server chooses the
 structure of its own URLs; including the algorithm name means that it
 can change algorithms without changing that structure.  See
@@ -596,7 +566,7 @@ This design meets the following requirements:
 
 The message/external-body media type {{MEDIA-TYPES}} also refers to
 external content, but many widely deployed MUAs display it as an
-attachment with no visible link, and it carries neither a digest nor a
+attachment with no visible link, and it has neither a digest nor a
 key.
 
 {{BIG-FILES-00}} placed a header field in the header section of the
@@ -653,12 +623,12 @@ because the message contains the URL and the key.  This is deliberate:
 it is how attached files behave.  But a URL can leak more easily than
 an attachment, for example through browser history, server logs or a
 Referer header field.  Encrypting the file means that a leaked URL alone
-doesn't reveal it.  The download link in the body ({{body}}) carries the
+doesn't reveal it.  The download link in the body ({{body}}) contains the
 key, so it is as sensitive as the message itself, and the attachment
 server sees the key when it is used.  A sender that doesn't want the
 attachment server to be able to read the file can omit the key from the
 download link, at the cost of recipients without aware MUAs being unable
-to use it.  An attachment server could instead carry the key in the
+to use it.  An attachment server could instead put the key in the
 fragment of the download link and decrypt the file in the browser.
 
 **Guessable URLs.**  A guessable URL ({{publishing}}) lets anyone fetch
@@ -668,7 +638,7 @@ URL also reveals that the file exists, and its size.
 **Changed content.**  The digest lets a receiver detect a file that was
 changed after the message was sent, whether by the sender, the
 attachment server or an attacker.  The digest is only as trustworthy as
-the header field that carries it; a DKIM signature that covers the
+the header field it is in; a DKIM signature that covers the
 Link-Attachment header field ({{composing}}) binds it to the signing
 domain.
 
