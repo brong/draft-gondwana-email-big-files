@@ -22,6 +22,7 @@ author:
     email: alexey.melnikov@isode.com
 
 normative:
+    DKIM: RFC6376
     RATE-LIMIT: RFC6585
     MEDIA-TYPES: RFC2046
     CID: RFC2392
@@ -44,9 +45,9 @@ normative:
         date: false
 
 informative:
+    WRAP: RFC8792
     E2E-GUIDANCE: RFC9787
     MAIL-ARCH: RFC5598
-    DKIM: RFC6376
     JMAP-MAIL: RFC8621
     BIG-FILES-00: I-D.melnikov-email-big-files
     BLOBEXT: I-D.gondwana-jmap-blobext
@@ -63,9 +64,10 @@ informative:
 --- abstract
 
 Message size limits mean that large files are sent by email as links
-to a web server rather than as attachments.  A link loses the properties that make an
-attachment useful: it can stop working, the file behind it can change,
-it can't be scanned in transit, and it may need a separate login.
+to a web server rather than as attachments.  A link loses the
+properties that make an attachment useful: it can stop working, the
+file behind it can change, it can't be scanned in transit, and it may
+need a separate login.
 
 This document defines the "Link-Attachment" header field, which lets
 receiving systems fetch, verify and keep a linked file, and then treat
@@ -109,8 +111,11 @@ This document replaces {{BIG-FILES-00}}; see {{changes}}.
 
 {::boilerplate bcp14-tagged}
 
-This document uses the terms MUA, MDA and Message Store from
+This document uses the terms MUA, MDA and message store from
 {{MAIL-ARCH}}, and:
+
+sender:
+: The sending MUA, or a service acting for it.
 
 linked attachment:
 : A file described by a Link-Attachment header field.
@@ -120,7 +125,7 @@ attachment server:
 
 receiving server:
 : Any system on the recipient's side that inspects message content,
-  such as an MDA, a content filter or a Message Store.
+  such as an MDA, a content filter or a message store.
 
 # The Link-Attachment Header Field {#header}
 
@@ -134,15 +139,20 @@ Link-Attachment header fields.
 
 The syntax is that of Content-Disposition {{CONTENT-DISP}}, so existing
 MIME parsers can read it.  The disposition type is "attachment", or
-"inline" for a file that the HTML body shows in place ({{cid-urls}}).
-Receivers MUST treat unknown types as "attachment".
+"inline" for a file that the HTML body shows in place ({{cid-urls}}),
+with the same meanings as in {{CONTENT-DISP}}.  Receivers MUST treat
+unknown types as "attachment".
 
 ## Parameters {#params}
 
-Parameter names are case-insensitive.  A header field in which a
-parameter defined here appears more than once MUST be ignored.
-Unknown parameters MUST be ignored.  Values can use {{MIME-PARAM}}
-encoding, for long values and for non-ASCII file names.
+Parameter names are case-insensitive.  Values can use {{MIME-PARAM}}
+encoding, for long values and for non-ASCII file names; it is decoded
+before the rules below apply, so "filename\*" is the "filename"
+parameter.  Unknown parameters MUST be ignored.
+
+A receiver MUST ignore a Link-Attachment header field in which a
+parameter defined here appears more than once, a REQUIRED parameter is
+missing, or a value is invalid.
 
 cid:
 : REQUIRED.  An identifier, with the syntax of id-left "@" id-right
@@ -163,7 +173,8 @@ digest-*:
   after "digest-" is from the IANA "Hash Algorithms for HTTP Digest
   Fields" registry {{DIGEST-FIELDS}}, and the value is base64
   {{BASE64}}.  "digest-sha-256" MUST be present; others MAY be.
-  Deprecated algorithms MUST NOT be used.
+  Deprecated algorithms MUST NOT be used.  Receivers MUST support
+  sha-256.
 
 filename:
 : RECOMMENDED.  As for Content-Disposition {{CONTENT-DISP}}.
@@ -199,7 +210,8 @@ the cipher, so a receiver can verify a large file as it streams.
 
 The only algorithm allowed is "aes128gcm" {{ECE}}.  The key material is
 the input keying material of {{Section 2.2 of ECE}}: at least 16 random
-octets.  The "keyid" field SHOULD be empty.  The attachment server
+octets.  The sender SHOULD leave the "keyid" field empty.  The
+attachment server
 serves the encrypted file without a Content-Encoding header field, and
 the receiver decrypts it.
 
@@ -219,7 +231,7 @@ id-right and date-time are from {{MAIL}}.
 link-attachment = "Link-Attachment:" [CFWS] la-disposition
                   *([CFWS] ";" [CFWS] la-parameter) [CFWS] CRLF
 
-la-disposition  = "attachment" / extension-token
+la-disposition  = "attachment" / "inline" / extension-token
 
 la-parameter    = cid-param / url-param / size-param /
                   digest-param / filename-param / type-param /
@@ -236,8 +248,8 @@ expires-param   = "expires" "=" quoted-string ; date-time
 other-param     = attribute "=" value
 ~~~
 
-Folding whitespace inside a quoted-string is removed before the value
-is used, so a long URL can be folded.
+A URL can't contain whitespace, so whitespace in the value of "url" is
+removed before it is used.  This lets a long URL be folded.
 
 ## Example {#example-header}
 
@@ -274,16 +286,18 @@ SHOULD have the same links, though MUAs can't hide them there.
 In the HTML body, the link to each linked attachment SHOULD be inside a
 "div" element with class "link-attachment" and an "id" equal to its
 "cid".  All of them MAY be inside a "div" element with class
-"link-attachments", along with any introductory text.
+"link-attachments", along with any introductory text.  The example
+uses the line wrapping of {{WRAP}}.
 
 ~~~ html
+=============== NOTE: '\' line wrapping per RFC 8792 ================
+
 <div class="link-attachments">
   <p>Bron Gondwana shared a file with you:</p>
   <div class="link-attachment"
        id="a1.20261117T091500Z@mail.example.com">
-<a href=
-"https://dl.example/pR7wQx?k=aes128gcm:9Mzuq2AvtfQJxwuIzYB4Gg"
->site-survey.mp4</a> (700 MB)
+    <a href="https://dl.example/pR7wQxV3mTz9KcLe2Hd8Fy?k=aes128gcm:\
+      9Mzuq2AvtfQJxwuIzYB4Gg">site-survey.mp4</a> (700 MiB)
   </div>
 </div>
 ~~~
@@ -291,7 +305,7 @@ In the HTML body, the link to each linked attachment SHOULD be inside a
 An MUA that shows a linked attachment as an attachment SHOULD hide its
 "link-attachment" element, and SHOULD hide a "link-attachments" element
 once it has hidden every "link-attachment" element inside it.  An MUA
-MUST NOT hide a link for a file it couldn't fetch or verify.
+MUST NOT hide a link unless it has a verified copy of the file.
 
 ## CID URLs {#cid-urls}
 
@@ -308,7 +322,7 @@ there is one, and otherwise to the linked attachment with that "cid".
 It resolves it only to a verified copy of the file ({{fetching}}).  An
 MUA that would have to fetch the file from the attachment server to
 display it SHOULD treat it as remote content, under the same policy as
-remote images ({{privacy}}).
+remote images ({{security}}).
 
 MUAs that don't support this document can't resolve these URLs, and
 will show, for example, a broken image.  Senders SHOULD NOT use them
@@ -318,7 +332,8 @@ unless they know that the recipients' MUAs support this document.
 
 ## Publishing the File {#publishing}
 
-The sender stores the file on an attachment server.  Unless the file is
+The sender stores the file on an attachment server, and chooses its
+URL and key.  Unless the file is
 meant to be public, the sender SHOULD encrypt it with a random key.
 
 The "url" and the download link MUST NOT be guessable, unless the file
@@ -352,8 +367,9 @@ recipient ({{security}}), and the file from depending on it.
 
 When forwarding a message as a message/rfc822 body part, which can't be
 changed, the MUA SHOULD add Link-Attachment header fields for its own
-copies to the outer message.  A receiving server that has a file with
-the same digest needn't fetch it again.
+copies to the outer message.  Receivers match these to the
+encapsulated message's linked attachments by digest, and a receiving
+server that has a file with the same digest needn't fetch it again.
 
 # Receiving {#receiving}
 
@@ -423,7 +439,8 @@ to it.
 
 An MUA whose message store doesn't do this MAY fetch the file itself,
 when the user opens it or in the background on arrival, but SHOULD NOT
-fetch it just because the message was displayed ({{privacy}}).
+fetch it just because the message was displayed, except for an image
+that the user's remote image policy allows ({{cid-urls}}).
 
 ## Lifetime {#lifetime}
 
@@ -446,8 +463,8 @@ and it has no digest or key.
 
 {{BIG-FILES-00}} put its header field in the body part holding the
 fallback links.  This document puts it in the header section of the
-message,
-where servers can find it without parsing MIME, and DKIM covers it.
+message, with the other header fields that servers read and DKIM
+signs.
 
 # IANA Considerations {#iana}
 
@@ -536,11 +553,12 @@ attachment server and from anyone with the URL alone.
 attachment server when the user views the message or opens the file,
 the sender learns when, and from where, it happened.  An image shown
 through a "cid" URL ({{cid-urls}}) is then a "web bug"
-({{Section 9.9 of E2E-GUIDANCE}}), as is any remote image.  So a receiving server SHOULD fetch
-all linked attachments and remote images when the message arrives, and
-store them with the message.  MUAs SHOULD get them from the server, so
-that nothing is fetched from the original location when the user views
-the message or opens an attachment.
+({{Section 9.9 of E2E-GUIDANCE}}), as is any remote image.  So a
+message store SHOULD, within the limits of {{fetching}}, fetch all
+linked attachments and remote images when the message arrives, and
+store them with the message.  MUAs SHOULD get them from the message
+store, so that nothing is fetched from the original location when the
+user views the message or opens an attachment.
 
 # Privacy Considerations {#privacy}
 
