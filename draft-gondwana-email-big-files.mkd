@@ -204,22 +204,22 @@ enc-alg         = 1*( %x61-7A / DIGIT / "-" )
 key-material    = 1*( ALPHA / DIGIT / "-" / "_" )
 ~~~
 
-The algorithm is an encrypting HTTP content coding ({{Section 16.6.1
-of HTTP}}).  A content coding defines the whole stored format, not just
-the cipher, so a receiver can verify a large file as it streams.
+The algorithm is a content coding from the HTTP Content Coding Registry
+({{Section 16.6.1 of HTTP}}) whose specification defines it as
+encrypting and says what its key is.  A content coding defines the whole
+stored format, not just the cipher, so a receiver can verify a large
+file as it streams.
 
-The only algorithm allowed is "aes128gcm" {{ECE}}.  The key material is
-the input keying material of {{Section 2.2 of ECE}}: at least 16 random
-octets.  The sender SHOULD leave the "keyid" field empty.  The
-attachment server
-serves the encrypted file without a Content-Encoding header field, and
-the receiver decrypts it.
+Receivers MUST support "aes128gcm" {{ECE}}.  Senders SHOULD use it
+unless they know every recipient supports another.  For "aes128gcm", the
+key material is the input keying material of {{Section 2.2 of ECE}}: at
+least 16 random octets, and the sender SHOULD leave the "keyid" field
+empty.
 
-A receiver that doesn't support the algorithm MUST treat the linked
+The attachment server serves the encrypted file without a
+Content-Encoding header field, and the receiver decrypts it.  A
+receiver that doesn't support the algorithm MUST treat the linked
 attachment as unavailable.
-
-{:aside}
-> Open issue: How should other content codings be allowed later?
 
 ## Formal Syntax {#abnf}
 
@@ -424,17 +424,18 @@ delivering it.
 A message store SHOULD fetch each linked attachment on delivery, if it
 wasn't fetched during scanning, and store it with the message.
 
-It SHOULD let the user's MUAs fetch the stored file by its digest, so
-the MUA needn't contact the attachment server.  It MUST NOT let a user
-fetch a file by digest unless the user can read a message that refers
-to it.
+It SHOULD let the user's MUAs fetch the stored file the same way as an
+attached file, so the MUA needn't contact the attachment server.  It
+MUST NOT let a user fetch the file unless the user can read a message
+that refers to it.  This applies to any lookup by digest too.
 
 {:aside}
-> Open issue: This is specific to each access protocol.  For JMAP
-> {{JMAP-MAIL}}, an Email property could list linked attachments with a
-> blobId for each, and {{BLOBEXT}} already describes blobs by digest.
-> IMAP would need a FETCH data item.  These might be separate
-> documents, along with a way for an MUA to get proxied remote images.
+> Open issue: This is specific to each access protocol.  JMAP
+> {{JMAP-MAIL}} could list linked attachments among an Email's
+> attachments, each with a blobId; {{BLOBEXT}} already describes blobs
+> by digest.  IMAP would need a FETCH data item.  These might be
+> separate documents, along with a way for an MUA to get proxied remote
+> images.
 
 An MUA whose message store doesn't do this MAY fetch the file itself,
 when the user opens it or in the background on arrival, but SHOULD NOT
