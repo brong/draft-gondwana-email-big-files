@@ -22,6 +22,7 @@ author:
     email: alexey.melnikov@isode.com
 
 normative:
+    MEDIA-TYPES: RFC2046
     CID: RFC2392
     ABNF: RFC5234
     MIME: RFC2045
@@ -42,7 +43,6 @@ normative:
         date: false
 
 informative:
-    MEDIA-TYPES: RFC2046
     E2E-GUIDANCE: RFC9787
     MAIL-ARCH: RFC5598
     DKIM: RFC6376
@@ -124,8 +124,12 @@ receiving server:
 # The Link-Attachment Header Field {#header}
 
 Each "Link-Attachment" header field describes one linked attachment.
-It appears only in the header section of the message ({{Section 2.1 of
-MAIL}}); one in the header fields of a body part MUST be ignored.
+It appears only in the header section of a message ({{Section 2.1 of
+MAIL}}); one in the header fields of a body part MUST be ignored.  It
+applies to the message in whose header section it appears, including a
+message encapsulated in a message/rfc822 body part ({{Section 5.2.1 of
+MEDIA-TYPES}}), and "cid" URLs in that message resolve against its own
+Link-Attachment header fields.
 
 The syntax is that of Content-Disposition {{CONTENT-DISP}}, so existing
 MIME parsers can read it.  The disposition type is "attachment", or
