@@ -393,7 +393,9 @@ to it.
 > Open issue: This is specific to each access protocol.  For JMAP
 > {{JMAP-MAIL}}, an Email property could list linked attachments with a
 > blobId for each, and {{BLOBEXT}} already describes blobs by digest.
-> IMAP would need a FETCH data item.  These might be separate documents.
+> IMAP would need a FETCH data item.  JMAP also needs a way for an MUA
+> to get proxied remote images ({{security}}).  These might be separate
+> documents.
 
 An MUA whose message store doesn't do this MAY fetch the file itself,
 when the user opens it or in the background on arrival, but SHOULD NOT
@@ -492,6 +494,16 @@ this.
 **Scanning.**  The key is in the message, so systems that handle the
 message can decrypt the file.  Encryption protects it only from the
 attachment server and from anyone with the URL alone.
+
+**Tracking pixels.**  An image shown through a "cid" URL ({{cid-urls}})
+is a tracking pixel if the MUA fetches it from the attachment server
+when the message is displayed: the sender learns when, and from where,
+the message was read.  The same is true of any remote image.  So a
+receiving server SHOULD proxy all images in the message, linked
+attachments and other remote images alike.  It SHOULD fetch them when
+the message arrives and store them with the message, so that nothing
+is fetched again when the user views it, and MUAs SHOULD get them from
+the server rather than from the original location.
 
 # Privacy Considerations {#privacy}
 
