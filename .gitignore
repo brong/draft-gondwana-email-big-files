@@ -1,0 +1,6 @@
+*.html
+*.txt
+*.xml
+.refcache/
+tools/cache/
+__pycache__/

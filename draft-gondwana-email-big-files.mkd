@@ -1,0 +1,720 @@
+---
+title: Linked Attachments in Email Messages
+abbrev: Linked Attachments
+docname: draft-gondwana-email-big-files-00
+submissionType: IETF
+category: std
+ipr: trust200902
+keyword: Internet-Draft
+stand_alone: yes
+pi: [toc, sortrefs, symrefs]
+
+author:
+ -
+    ins: B. Gondwana
+    name: Bron Gondwana
+    org: Fastmail
+    email: brong@fastmailteam.com
+ -
+    ins: A. Melnikov
+    name: Alexey Melnikov
+    org: Isode Limited
+    email: alexey.melnikov@isode.com
+
+normative:
+    ABNF: RFC5234
+    MIME: RFC2045
+    MIME-PARAM: RFC2231
+    CONTENT-DISP: RFC2183
+    URI: RFC3986
+    BASE64: RFC4648
+    MAIL: RFC5322
+    REG-PROC: RFC3864
+    HTTP: RFC9110
+    ECE: RFC8188
+    DIGEST-FIELDS: RFC9530
+    HTML:
+        target: https://html.spec.whatwg.org/
+        title: HTML Living Standard
+        author:
+            org: WHATWG
+        date: false
+
+informative:
+    MEDIA-TYPES: RFC2046
+    CID: RFC2392
+    MAIL-ARCH: RFC5598
+    DKIM: RFC6376
+    JMAP-MAIL: RFC8621
+    BIG-FILES-00: I-D.melnikov-email-big-files
+    BLOBEXT: I-D.gondwana-jmap-blobext
+    CAPABILITY-URLS:
+        target: https://www.w3.org/TR/capability-urls/
+        title: Good Practices for Capability URLs
+        author:
+            ins: J. Tennison
+            name: Jeni Tennison
+        date: 2014-02-18
+        seriesinfo:
+            W3C: First Public Working Draft
+
+--- abstract
+
+Email messages carry files as attachments, but message size limits mean
+that large files are often uploaded to a web server and sent as a link
+instead.  A link loses the properties that make an attachment useful: it
+can stop working, the file behind it can change, it can't be scanned in
+transit, and it may need a separate login.
+
+This document defines the "Link-Attachment" header field, which
+describes a file stored on a web server well enough that receiving
+systems can fetch, verify and store it when the message arrives, and then
+treat it like any other attachment.  It also defines markup that lets
+aware clients hide the fallback links in the message body.
+
+--- middle
+
+# Introduction
+
+## Properties of attached files {#properties}
+
+A file attached to an email message, as a MIME {{MIME}} body part, has
+some properties that users rely on, often without thinking about it:
+
+1. **It lasts as long as the message.**  Every recipient holds a copy of
+   the file inside their copy of the message.  The file remains available
+   for as long as the recipient keeps the message, no matter what the
+   sender, or the sender's service provider, later does.
+
+2. **It can't be changed after sending.**  The file that the recipient
+   reads is the file that the sender sent.  If a message is cited months
+   later, as a record of what was agreed, the attachment is part of that
+   record.
+
+3. **It can be scanned in transit.**  Systems that handle the message,
+   such as the receiving organisation's malware and data-loss filters,
+   can read the file before it reaches the recipient, and reject or
+   quarantine the message.
+
+4. **Having the message is having the file.**  Anyone who can read the
+   message can open the attachment.  There is no separate login, no
+   access list, and no request to the sender for permission.  Forwarding
+   the message forwards the file.
+
+## The problem with links {#problem}
+
+Most email systems limit the size of messages that they will accept, and
+the limit can be as low as 10 megabytes.  The limits differ from system
+to system, so a sender often can't know whether a large message will be
+delivered.  Meanwhile, the files that people want to send keep getting
+bigger.
+
+The common workaround is to upload the file to a web server, often a
+file-sharing service run by the sender's email provider, and to send a
+link in the body of the message.  Many mail clients and services do this
+automatically when an attachment is too large, each in their own way.
+
+A link of this kind loses every property in {{properties}}:
+
+1. The file lasts only as long as the server keeps it.  The service may
+   expire it after a few days, the sender may delete it, or the service
+   may close.
+
+2. The file at the link can be replaced after the message is sent, and
+   the recipient has no way to tell.
+
+3. Systems that handle the message see only a link.  They can't scan
+   the file, and typically don't try.
+
+4. Access may depend on a login or an access list held by the server,
+   rather than on possession of the message.
+
+And because each service builds its own links and its own web pages, a
+receiving client can't do better than display the link.
+
+## This document {#this-document}
+
+This document defines a way for the sender to describe a file stored on
+a web server, in a structured form that receiving systems can act on.
+The "Link-Attachment" header field ({{header}}) names each file, and
+gives the URL from which it can be fetched, its size, a digest of its
+content, and optionally a key with which it was encrypted.  This lets a
+receiving system restore the properties of an attached file:
+
+1. A receiving server fetches the file when the message arrives, and
+   stores it for as long as it stores the message ({{lifetime}}), so
+   the file outlives the sender's copy.
+
+2. The digest lets the receiving system check that the file it fetched
+   is the file that the sender described, so that a changed file is
+   detected ({{fetching}}).
+
+3. A receiving server can fetch the file, and decrypt it with the key in
+   the message, during its normal content scanning ({{scanning}}).
+
+4. The URL and key are all that is needed to fetch the file
+   ({{publishing}}).  Having the message is having the file.
+
+The message body also includes ordinary links to the files, so that
+recipients whose clients don't support this document can still download
+them.  {{html}} defines markup that lets clients which do support it hide
+those links and show the files as attachments instead.
+
+This document replaces {{BIG-FILES-00}}.  The differences are listed in
+{{changes}}.
+
+# Conventions and Definitions
+
+{::boilerplate bcp14-tagged}
+
+This document uses the terms "Mail User Agent" (MUA), "Mail Delivery
+Agent" (MDA) and "Message Store" (MS) from {{MAIL-ARCH}}.  It also uses
+the following terms:
+
+linked attachment:
+: A file described by a Link-Attachment header field.
+
+attachment server:
+: The HTTP {{HTTP}} server from which the sender has made a linked
+  attachment available.
+
+receiving server:
+: Any system that handles a message on the recipient's side and
+  inspects its content, such as an MDA, a content filter, or an MS.
+
+# The Link-Attachment Header Field {#header}
+
+The "Link-Attachment" header field describes one linked attachment.  A
+message contains one Link-Attachment header field for each linked
+attachment.
+
+The header field appears only in the header section of the message
+itself, not in the header section of a MIME body part.  A Link-Attachment
+header field in a body part MUST be ignored.
+
+The header field uses the same syntax as the Content-Disposition header
+field {{CONTENT-DISP}}: a disposition type, followed by parameters.  This
+lets existing MIME parsers read it.  The disposition type is
+"attachment".  A receiver MUST treat an unrecognised disposition type
+as "attachment", as {{CONTENT-DISP}} does.
+
+## Parameters {#params}
+
+Parameter names are case-insensitive.  Each parameter MUST NOT appear
+more than once in a header field; a receiver MUST ignore a header field
+in which a parameter defined here appears more than once.  Receivers
+MUST ignore parameters they don't recognise.
+
+Any parameter value can be encoded using {{MIME-PARAM}}, which allows
+long values to be split across several lines and allows non-ASCII
+characters in "filename".
+
+cid:
+: REQUIRED.  An identifier for this linked attachment, using the syntax
+  of the "id-left@id-right" portion of a msg-id {{MAIL}}.  It MUST be
+  unique among the Link-Attachment header fields of the message, and
+  SHOULD be globally unique, in the same way as a Content-ID {{CID}}.  It
+  identifies the attachment in the HTML body ({{html}}), and lets a
+  forwarded or replied-to message refer to the same attachment.
+
+url:
+: REQUIRED.  An absolute "https" URI {{URI}} from which the content of
+  the linked attachment can be fetched with a GET request ({{fetching}}).
+
+size:
+: REQUIRED.  The size of the file in octets, as a decimal number with
+  no leading zeros.  This is the size of the file itself, after any
+  decryption.
+
+digest-*:
+: At least one REQUIRED.  A digest of the file, after any decryption.
+  The part of the parameter name after "digest-" is a hash algorithm
+  name from the IANA "Hash Algorithms for HTTP Digest Fields" registry
+  {{DIGEST-FIELDS}}, for example "digest-sha-256".  The value is the
+  digest, encoded in base64 {{BASE64}} with padding.  Senders MUST
+  include "digest-sha-256", and MAY include others.  Algorithms whose
+  registry status is "deprecated" MUST NOT be used.
+
+filename:
+: RECOMMENDED.  A suggested file name, with the same meaning and
+  handling as the "filename" parameter of Content-Disposition
+  {{CONTENT-DISP}}.
+
+type:
+: OPTIONAL.  The media type of the file, as a type/subtype pair with no
+  parameters.  If absent, the type is "application/octet-stream".  The
+  Content-Type of the HTTP response does not override this value.
+
+key:
+: OPTIONAL.  The key with which the file was encrypted, encoded in
+  base64 {{BASE64}} with padding.  If this parameter is present, the
+  "enc" parameter MUST also be present.
+
+enc:
+: OPTIONAL.  The encryption scheme applied to the file before it was
+  stored on the attachment server.  The only value defined by this
+  document is "aes128gcm", meaning that the content fetched from the URL
+  is in the format defined in {{Section 2 of ECE}}, and "key" is the
+  16-octet input keying material (IKM).  If "enc" is present without
+  "key", or has a value that the receiver doesn't support, the receiver
+  can't decrypt the file, and MUST treat the linked attachment as
+  unavailable.
+
+expires:
+: OPTIONAL.  The date and time, in the "date-time" syntax of {{MAIL}},
+  until which the sender intends the file to be available from the URL.
+  The file might remain available after this time, or vanish before it.
+
+Although "aes128gcm" is defined as a content coding for HTTP, here it
+describes the stored file itself.  The attachment server serves the
+encrypted file as its content, with no Content-Encoding header field
+for the encryption, and the receiver decrypts it after fetching.  No
+content coding negotiation is involved.
+
+{:aside}
+> Open issue: Is "aes128gcm" the right single choice?  It is
+> already specified, is designed for streaming, and doesn't require the
+> whole file to be held in memory to decrypt it.
+
+## Formal Syntax {#abnf}
+
+The following syntax uses ABNF {{ABNF}}.  Rules not defined here
+("token", "quoted-string", "value", "attribute", "extension-token") are
+from {{MIME}}, and CFWS, id-left, id-right and date-time are from
+{{MAIL}}.
+
+~~~ abnf
+link-attachment = "Link-Attachment:" [CFWS] la-disposition
+                  *([CFWS] ";" [CFWS] la-parameter) [CFWS] CRLF
+
+la-disposition  = "attachment" / extension-token
+
+la-parameter    = cid-param / url-param / size-param /
+                  digest-param / filename-param / type-param /
+                  key-param / enc-param / expires-param /
+                  other-param
+
+cid-param       = "cid" "=" value
+                  ; value is id-left "@" id-right
+
+url-param       = "url" "=" value
+                  ; value is an absolute "https" URI
+
+size-param      = "size" "=" 1*DIGIT
+
+digest-param    = "digest-" token "=" value
+                  ; token is a hash algorithm name,
+                  ; value is base64 with padding
+
+filename-param  = "filename" "=" value
+
+type-param      = "type" "=" value
+                  ; value is type "/" subtype
+
+key-param       = "key" "=" value
+                  ; value is base64 with padding
+
+enc-param       = "enc" "=" value
+
+expires-param   = "expires" "=" quoted-string
+                  ; content is date-time
+
+other-param     = attribute "=" value
+~~~
+
+When the value of a parameter is a quoted-string, any folding
+whitespace inside it is removed before the value is used.  This allows
+a long URL to be folded across lines without {{MIME-PARAM}} encoding.
+
+## Example {#example-header}
+
+~~~
+Link-Attachment: attachment;
+    cid="a1.20261117T091500Z@mail.example.com";
+    filename="site-survey.mp4"; type="video/mp4"; size=734003200;
+    url="https://files.example.com/la/
+         Hq3Ld9YtW2xKq8vZp0aN5uFbE7cJr1sM";
+    digest-sha-256="X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=";
+    enc="aes128gcm"; key="9Mzuq2AvtfQJxwuIzYB4Gg==";
+    expires="Thu, 17 Dec 2026 09:15:00 +0000"
+~~~
+
+# Message Body {#body}
+
+A message with linked attachments MUST also be readable by recipients
+whose MUAs don't support this document.  Its body therefore MUST
+include, for each linked attachment, a link from which the recipient
+can download the file using a web browser, with its file name and size.
+
+This download link is not, in general, the URL in the "url" parameter.
+The "url" parameter gives the file as stored, which may be encrypted;
+the download link leads to the file as the recipient wants it.  The
+attachment server needs the key to decrypt the file, so the download
+link SHOULD carry the key, for example in its query component.  See
+{{security}} for the consequences.
+
+A message with linked attachments SHOULD have an HTML {{HTML}} body
+part.  A text/plain body part, if present, SHOULD contain the same
+links, but text/plain offers no way to mark them, so the MUA can't hide
+them.
+
+## HTML Markup {#html}
+
+In the HTML body, the link to each linked attachment, and any text that
+describes only that attachment, SHOULD be enclosed in a "div" element
+whose "class" attribute contains "link-attachment" and whose "id"
+attribute is the value of the "cid" parameter of the matching
+Link-Attachment header field.
+
+All of the linked attachments, together with any surrounding text that
+introduces them, MAY be enclosed in a "div" element whose "class"
+attribute contains "link-attachments".
+
+~~~ html
+<div class="link-attachments">
+  <p>Bron Gondwana shared a file with you:</p>
+  <div class="link-attachment"
+       id="a1.20261117T091500Z@mail.example.com">
+<a href="https://files.example.com/d/pR7wQx?k=9Mzuq2AvtfQJxwuIzYB4Gg"
+>site-survey.mp4</a> (700 MB)
+  </div>
+</div>
+~~~
+
+An MUA that displays a linked attachment in the same way as an attached
+file:
+
+* SHOULD hide each "link-attachment" element whose "id" matches the
+  "cid" of a linked attachment that it displays; and
+
+* SHOULD hide each "link-attachments" element whose "link-attachment"
+  elements it has all hidden.
+
+An MUA MUST NOT hide a "link-attachment" element that doesn't match a
+Link-Attachment header field of the message, or whose linked attachment
+it can't display, for example because the file couldn't be fetched or
+didn't match its digest.  The recipient can then still use the link.
+
+# Sending {#sending}
+
+## Publishing the File {#publishing}
+
+The sending MUA, or its service, stores the file on an attachment
+server.  If the file is not meant to be public, the sender SHOULD
+encrypt it ({{params}}) with a key generated at random for that file.
+
+The URL in the "url" parameter, and the download link in the body, MUST
+NOT be guessable, unless the file is one that the sender has already
+made public.  They SHOULD each contain at least 128 bits of
+cryptographically random data, as a capability URL {{CAPABILITY-URLS}}.
+Possession of the URL then grants access to the file, and possession of
+the message grants possession of the URL.  This gives linked attachments
+the fourth property in {{properties}}.
+
+The attachment server MUST respond to a GET request for the URL in the
+"url" parameter without authentication, cookies, or any other state not
+contained in the URL.  It MUST always return the same content for that
+URL, for as long as it serves it.
+
+The attachment server SHOULD keep the file available until the time
+given in the "expires" parameter, if any, and SHOULD keep it for at least
+several days in any case, so that every receiving server has a chance to
+fetch it.
+
+The attachment server's download page SHOULD send a Referrer-Policy
+header field with the value "no-referrer", so that the URL doesn't leak
+in requests to other sites.
+
+## Composing the Message {#composing}
+
+The sending MUA adds a Link-Attachment header field for each linked
+attachment, and includes links in the message body ({{body}}).
+
+If the message is signed with DKIM {{DKIM}}, the signature SHOULD cover
+all Link-Attachment header fields, and SHOULD prevent the addition of
+more, by listing "Link-Attachment" in the "h=" tag once more than the
+number of fields present.
+
+A linked attachment can be kept in a draft message, and is then
+published only once.
+
+## Forwarding and Replying {#forwarding}
+
+When a user forwards a message that has linked attachments, or replies
+to it and keeps its attachments, the MUA SHOULD copy the Link-Attachment
+header fields, and the matching parts of the body, into the new
+message.  The "cid" stays the same, so that receiving servers that
+already hold the file can recognise it.
+
+If the original URL has expired, or may expire before the new
+recipients fetch it, the MUA MAY instead publish the file again, from
+its own copy, and give a new URL.  Because the digest is unchanged, a
+receiving server that already holds the file need not fetch it again.
+
+# Receiving {#receiving}
+
+## Fetching and Verifying {#fetching}
+
+To fetch a linked attachment, a receiving server or MUA makes a GET
+request to the URL in the "url" parameter.
+
+* The request MUST NOT include cookies, credentials, or other
+  information that identifies the recipient.
+
+* The client MUST verify the server's certificate as described in
+  {{Section 4.3.4 of HTTP}}.
+
+* The client MAY follow redirects, to "https" URIs only, and SHOULD
+  limit the number of redirects it follows.
+
+* Any final status code other than 2xx means that the fetch failed.  A
+  fetch that failed with a 5xx status code, or a network error, MAY be
+  retried later, with increasing delays between attempts.
+
+* The client SHOULD stop reading the content as soon as it exceeds the
+  size it expects: the value of the "size" parameter, plus, for
+  "aes128gcm", the overhead determined from the record size in the
+  header of the encrypted content.
+
+The client then decrypts the content, if "enc" is present, and checks
+that its size matches the "size" parameter and that its digest matches
+every "digest-*" parameter whose algorithm the client supports.  If the
+client supports none of the algorithms, or any check fails, the linked
+attachment is unavailable.  A client MUST NOT present an unavailable
+linked attachment to the user as a verified attachment.
+
+A receiving server MAY decline to fetch a linked attachment, for
+example because it is larger than the server's policy allows.  It is
+then left to the MUA to fetch it, or to the user to follow the link.
+
+## Content Scanning {#scanning}
+
+A receiving server that scans the content of attached files, for example
+for malware, SHOULD fetch and scan each linked attachment that it would
+have scanned had the same file been attached to the message.  It
+applies the same policy to the result as it would to an attachment:
+for example, it can reject or quarantine the message.
+
+A receiving server that scans messages before accepting them can fetch
+linked attachments during the SMTP transaction, but large files may take
+too long.  It MAY instead accept the message and scan the linked
+attachments before delivering it to the recipient's mailbox.
+
+## Storage and Access {#storage}
+
+A message store SHOULD fetch each linked attachment when it delivers the
+message, if it has not already been fetched during scanning, and SHOULD
+store the verified file alongside the message.
+
+The message store SHOULD provide a way for the user's MUAs to fetch the
+stored file from the message store rather than from the attachment
+server, identified by its digest.  Then the MUA doesn't contact the
+attachment server, and the file remains available after the attachment
+server has removed it.
+
+A message store MUST NOT let a user fetch a stored file by its digest
+unless the user can read a message that refers to that file.  Otherwise
+a user who knows a digest could fetch, or learn of the existence of,
+files sent to other users.
+
+{:aside}
+> Open issue: How this is done is specific to each access protocol.
+> For JMAP {{JMAP-MAIL}}, an Email property could list linked
+> attachments with a blobId for each stored file, and {{BLOBEXT}}
+> already allows blobs to be described by their digests.  For IMAP, a
+> FETCH data item would be needed.  These might belong in separate
+> documents.
+
+An MUA whose message store doesn't provide stored files MAY fetch the
+linked attachment itself ({{fetching}}).  It SHOULD do so when the user
+asks to open the file, or in the background when the message arrives,
+rather than when the message is displayed ({{privacy}}).
+
+## Lifetime {#lifetime}
+
+A message store that stores a linked attachment SHOULD keep it for as
+long as it keeps any message that refers to it, and MAY remove it once
+no such message remains.  A message store can keep a single copy of a
+file that many messages refer to, using its digest to find duplicates.
+
+This gives a linked attachment the same lifetime as an attached file:
+it lasts as long as the recipient's message does, whatever happens to
+the attachment server.
+
+# Requirements and Alternatives Not Taken {#alternatives}
+
+This design meets the following requirements:
+
+* MUAs that don't support this document can show links to the files.
+
+* A message can have many linked attachments.
+
+* Linked attachments can be kept in drafts, forwarded and replied to.
+
+* Receiving systems can restore the properties in {{properties}}.
+
+The message/external-body media type {{MEDIA-TYPES}} also refers to
+external content, but many widely deployed MUAs display it as an
+attachment with no visible link, and it carries neither a digest nor a
+key.
+
+{{BIG-FILES-00}} placed a header field in the header section of the
+text/plain or text/html body part that held the fallback links.  This
+document places it in the message header section instead, where
+receiving servers can find it without parsing the MIME structure, and
+where it is covered by a DKIM signature in the same way as other header
+fields.
+
+# IANA Considerations {#iana}
+
+## Message Header Field {#iana-header}
+
+IANA is asked to add the following entry to the "Permanent Message
+Header Field Names" registry, following the procedures of {{REG-PROC}}:
+
+Header field name:
+: Link-Attachment
+
+Applicable protocol:
+: mail
+
+Status:
+: standard
+
+Author/change controller:
+: IETF
+
+Specification document(s):
+: this document
+
+## Link-Attachment Parameters {#iana-params}
+
+IANA is asked to create a "Link-Attachment Parameters" registry.  New
+entries are added under the Specification Required policy.  Each entry
+has a parameter name, a description, and a reference.  The initial
+entries are:
+
+| Name | Description | Reference |
+|---|---|---|
+| cid | Identifier of the linked attachment | {{params}} |
+| url | URL from which the file can be fetched | {{params}} |
+| size | Size of the file in octets | {{params}} |
+| digest-* | Digest of the file, by hash algorithm | {{params}} |
+| filename | Suggested file name | {{params}} |
+| type | Media type of the file | {{params}} |
+| key | Key with which the file was encrypted | {{params}} |
+| enc | Encryption scheme | {{params}} |
+| expires | Time until which the file is intended to be available | {{params}} |
+
+{:aside}
+> Open issue: Does "enc" need a registry of its own, or is it enough
+> for a new scheme to be defined in a document that registers nothing?
+
+# Security Considerations {#security}
+
+**Access to the file.**  Anyone who has the message can fetch the file,
+because the message contains the URL and the key.  This is deliberate:
+it is how attached files behave.  But a URL can leak more easily than
+an attachment, for example through browser history, server logs or a
+Referer header field.  Encrypting the file means that a leaked URL alone
+doesn't reveal it.  The download link in the body ({{body}}) carries the
+key, so it is as sensitive as the message itself, and the attachment
+server sees the key when it is used.  A sender that doesn't want the
+attachment server to be able to read the file can omit the key from the
+download link, at the cost of recipients without aware MUAs being unable
+to use it.  An attachment server could instead carry the key in the
+fragment of the download link and decrypt the file in the browser.
+
+**Guessable URLs.**  A guessable URL ({{publishing}}) lets anyone fetch
+the file without the message.  Encryption limits the damage, but the
+URL also reveals that the file exists, and its size.
+
+**Changed content.**  The digest lets a receiver detect a file that was
+changed after the message was sent, whether by the sender, the
+attachment server or an attacker.  The digest is only as trustworthy as
+the header field that carries it; a DKIM signature that covers the
+Link-Attachment header field ({{composing}}) binds it to the signing
+domain.
+
+**Server-side request forgery.**  A receiving server that fetches URLs
+taken from messages can be made to send requests to arbitrary hosts.
+Receiving servers MUST NOT fetch a linked attachment from an address
+that is not publicly routable, such as a loopback, link-local or
+private address, or from a host that resolves to one, and MUST apply
+the same check after each redirect.
+
+**Resource use.**  A message can name many large files, or files that
+are larger than "size" claims.  Receiving servers SHOULD limit the
+number and total size of the linked attachments they fetch for a
+message, and stop reading content that exceeds the expected size
+({{fetching}}).
+
+**Misleading links.**  The links in the body might not match the
+Link-Attachment header fields.  An MUA that hides the links ({{html}})
+and displays the verified file instead protects the user from this.
+MUAs that don't support this document show the links as written, as
+they would any other link.
+
+**Scanning encrypted files.**  The key is in the message, so a
+receiving server that can read the message can decrypt and scan the
+file.  The encryption protects the file from the attachment server and
+from anyone who obtains the URL alone, not from systems that handle the
+message.
+
+**Digest lookups.**  A message store that serves files by digest MUST
+check that the user can read a message that refers to the file
+({{storage}}).
+
+# Privacy Considerations {#privacy}
+
+The attachment server sees every request for the file.  If an MUA
+fetches the file when the message is displayed, the request tells the
+sender when the recipient read the message, and from where, much as a
+remote image does.  A sender could also give each recipient a different
+URL to learn which of them opened it.
+
+Fetching by the receiving server when the message arrives ({{scanning}},
+{{storage}}) reveals only that the message was delivered, and the
+request comes from the receiving server rather than the recipient's
+device.  MUAs SHOULD fetch linked attachments from their message store
+where possible, and otherwise SHOULD NOT fetch them merely because a
+message was displayed.
+
+--- back
+
+# Changes from draft-melnikov-email-big-files-00 {#changes}
+{:numbered="false"}
+
+* Renamed the header field from "Content-External" to
+  "Link-Attachment", and changed its syntax from that of Content-Type
+  to that of Content-Disposition.
+
+* Moved the header field from the header section of the fallback body
+  part to the message header section.
+
+* Added the "cid" parameter, and the HTML markup that uses it.
+
+* Added the "key" and "enc" parameters, for encrypted files.
+
+* Made "size" and "digest-sha-256" required, and took digest algorithm
+  names from the HTTP Digest Fields registry.
+
+* Renamed "name" to "filename", to match Content-Disposition, and
+  replaced the media type with the optional "type" parameter.
+
+* Removed the "permission" parameter: a linked attachment can't
+  change, like an attached file.
+
+* Added requirements for attachment servers, receiving servers and
+  message stores: unguessable URLs, fetching during scanning, local
+  storage with access by digest, and lifetime tied to the message.
+
+* Wrote the Security and Privacy Considerations.
+
+# Acknowledgments
+{:numbered="false"}
+
+Thanks to the participants in the discussion of large file attachments
+at the IETF meeting where this design was sketched out.  The idea that a
+receiving server should fetch and keep the file came from that
+discussion.
