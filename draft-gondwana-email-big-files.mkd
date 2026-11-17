@@ -61,9 +61,8 @@ informative:
 
 --- abstract
 
-Email messages often include files as attachments, but message size
-limits mean that large files are often uploaded to a web server and
-sent as a link instead.  A link loses the properties that make an
+Message size limits mean that large files are sent by email as links
+to a web server rather than as attachments.  A link loses the properties that make an
 attachment useful: it can stop working, the file behind it can change,
 it can't be scanned in transit, and it may need a separate login.
 
@@ -76,10 +75,13 @@ clients hide the fallback links in the message body.
 
 # Introduction {#intro}
 
-Most email systems limit the size of messages, sometimes to as little
-as 10 megabytes, and the limits differ between systems.  So large files
-are often uploaded to a web server and sent as a link instead.  Many
-clients and services do this automatically, each in their own way.
+Most SMTP systems limit the size of messages that can be sent, which
+can be as low as 10 megabytes.  Moreover, limits vary depending on the
+recipient's system.  End users want to send files to each other, and
+the files they create keep getting bigger.
+
+The usual workaround is to upload the file to a web server and send a
+link.  Many clients and services do this, each in their own way.
 
 An attached file has properties that a link lacks:
 
