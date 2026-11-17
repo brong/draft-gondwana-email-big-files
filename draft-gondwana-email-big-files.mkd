@@ -495,15 +495,15 @@ this.
 message can decrypt the file.  Encryption protects it only from the
 attachment server and from anyone with the URL alone.
 
-**Tracking pixels.**  An image shown through a "cid" URL ({{cid-urls}})
-is a tracking pixel if the MUA fetches it from the attachment server
-when the message is displayed: the sender learns when, and from where,
-the message was read.  The same is true of any remote image.  So a
-receiving server SHOULD proxy all images in the message, linked
-attachments and other remote images alike.  It SHOULD fetch them when
-the message arrives and store them with the message, so that nothing
-is fetched again when the user views it, and MUAs SHOULD get them from
-the server rather than from the original location.
+**Tracking.**  If an MUA fetches a linked attachment from the
+attachment server when the user views the message or opens the file,
+the sender learns when, and from where, it happened.  An image shown
+through a "cid" URL ({{cid-urls}}) is then a tracking pixel, and the
+same is true of any remote image.  So a receiving server SHOULD fetch
+all linked attachments and remote images when the message arrives, and
+store them with the message.  MUAs SHOULD get them from the server, so
+that nothing is fetched from the original location when the user views
+the message or opens an attachment.
 
 # Privacy Considerations {#privacy}
 
