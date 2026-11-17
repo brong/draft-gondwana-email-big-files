@@ -43,6 +43,7 @@ normative:
 
 informative:
     MEDIA-TYPES: RFC2046
+    E2E-GUIDANCE: RFC9787
     MAIL-ARCH: RFC5598
     DKIM: RFC6376
     JMAP-MAIL: RFC8621
@@ -498,8 +499,8 @@ attachment server and from anyone with the URL alone.
 **Tracking.**  If an MUA fetches a linked attachment from the
 attachment server when the user views the message or opens the file,
 the sender learns when, and from where, it happened.  An image shown
-through a "cid" URL ({{cid-urls}}) is then a tracking pixel, and the
-same is true of any remote image.  So a receiving server SHOULD fetch
+through a "cid" URL ({{cid-urls}}) is then a "web bug"
+({{Section 9.9 of E2E-GUIDANCE}}), as is any remote image.  So a receiving server SHOULD fetch
 all linked attachments and remote images when the message arrives, and
 store them with the message.  MUAs SHOULD get them from the server, so
 that nothing is fetched from the original location when the user views
