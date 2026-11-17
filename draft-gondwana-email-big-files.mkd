@@ -94,9 +94,10 @@ This document defines the "Link-Attachment" header field ({{header}}),
 which gives the URL, size and digest of each file and, if the file is
 encrypted, its key.  Receiving servers fetch, verify and scan the file
 when the message arrives ({{receiving}}), and keep it as long as the
-message ({{lifetime}}), which restores those properties.  The message
-body also includes ordinary links for clients that don't support this
-document, and markup that lets clients that do hide them ({{html}}).
+message ({{lifetime}}), which restores those properties.  Until
+support is widespread, the message body also includes ordinary links,
+with markup that lets clients that support this document hide them
+({{html}}).
 
 This document replaces {{BIG-FILES-00}}; see {{changes}}.
 
@@ -244,9 +245,11 @@ Link-Attachment: attachment;
 
 # Message Body {#body}
 
-The body MUST include, for each linked attachment, a link from which
+The body SHOULD include, for each linked attachment, a link from which
 the file can be downloaded with a web browser, with its file name and
-size.
+size.  A sender MAY leave the links out when it knows that every
+recipient's MUA supports this document, for example because they all
+use the same service.
 
 This download link is usually not the "url" parameter, which gives the
 stored, possibly encrypted, file.  So that the attachment server can
