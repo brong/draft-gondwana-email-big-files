@@ -47,6 +47,8 @@ informative:
     DKIM: RFC6376
     JMAP-MAIL: RFC8621
     BIG-FILES-00: I-D.melnikov-email-big-files
+    JWA: RFC7518
+    AEAD: RFC5116
     BLOBEXT: I-D.gondwana-jmap-blobext
     CAPABILITY-URLS:
         target: https://www.w3.org/TR/capability-urls/
@@ -258,43 +260,56 @@ expires:
 
 ## Key Format {#key-format}
 
-A key is written as the name of an encryption algorithm, a colon, and
+A key is written as the name of the encryption algorithm, a colon, and
 the key material encoded in base64url {{BASE64}} without padding:
 
 ~~~ abnf
 key-value       = enc-alg ":" key-material
 enc-alg         = 1*( %x61-7A / DIGIT / "-" )
-                  ; lowercase name from the "Link-Attachment
-                  ; Encryption Algorithms" registry
+                  ; content coding name, in lowercase
 key-material    = 1*( ALPHA / DIGIT / "-" / "_" )
                   ; base64url without padding
 ~~~
 
-The algorithm name comes from the "Link-Attachment Encryption
-Algorithms" registry ({{iana-enc}}), which defines, for each algorithm,
-the format of the stored file and the length and meaning of the key
-material.  The same format is used in the "key" parameter and in the
-download link ({{body}}), and contains only characters that need no
-escaping in a URI query component.
+The algorithm name is the name of an encrypting content coding from
+the IANA "HTTP Content Coding Registry" ({{Section 16.6.1 of HTTP}}).
+A content coding defines a complete format for encrypted content, not
+just a cipher: how the content is split into records, where nonces and
+authentication tags go, and how the encryption key is derived.  A large
+file needs all of these, and the registries of cipher identifiers, such
+as the JOSE "enc" values {{JWA}} and the AEAD algorithm registry
+{{AEAD}}, don't provide them.
 
-This document defines one algorithm, "aes128gcm": the content fetched
-from the URL is in the format defined in {{Section 2 of ECE}}, and the
-key material is the 16-octet input keying material (IKM).  Although
-"aes128gcm" is also the name of an HTTP content coding, here it
-describes the stored file itself.  The attachment server serves the
-encrypted file as its content, with no Content-Encoding header field
-for the encryption, and the receiver decrypts it after fetching.  No
-content coding negotiation is involved.
+The same format is used in the "key" parameter and in the download link
+({{body}}), and contains only characters that need no escaping in a URI
+query component.
+
+This document allows one algorithm, "aes128gcm" {{ECE}}.  The content
+fetched from the URL is in the format defined in {{Section 2 of ECE}},
+and the key material is the input keying material (IKM) of
+{{Section 2.2 of ECE}}.  Senders MUST generate the key material at
+random, and it MUST be at least 16 octets long.  The "keyid" field of
+the encrypted content SHOULD be empty, and receivers ignore it.
+
+Other content codings can be allowed by future documents, but only ones
+that provide authenticated encryption with a symmetric key.  A content
+coding that is not an encryption, such as "gzip", MUST NOT be used as
+an algorithm name.
+
+Although the algorithm is named by a content coding, it describes the
+stored file itself.  The attachment server serves the encrypted file as
+its content, with no Content-Encoding header field for the encryption,
+and the receiver decrypts it after fetching.  No content coding
+negotiation is involved.
 
 If the algorithm is one that the receiver doesn't support, or the key
-material is not of the length the algorithm requires, the receiver
-can't decrypt the file, and MUST treat the linked attachment as
-unavailable.
+material is too short, the receiver can't decrypt the file, and MUST
+treat the linked attachment as unavailable.
 
 {:aside}
-> Open issue: Is "aes128gcm" the right single initial algorithm?  It
-> is already specified, is designed for streaming, and doesn't require
-> the whole file to be held in memory to decrypt it.
+> Open issue: Should the document allow other content codings now, or
+> name a way to allow them later, such as a column in the content
+> coding registry that marks encrypting codings?
 
 ## Formal Syntax {#abnf}
 
@@ -627,35 +642,6 @@ entries are:
 | key | Encryption algorithm and key | {{params}} |
 | expires | Time until which the file is intended to be available | {{params}} |
 
-## Link-Attachment Encryption Algorithms {#iana-enc}
-
-IANA is asked to create a "Link-Attachment Encryption Algorithms"
-registry.  New entries are added under the Specification Required
-policy.  Names consist of lowercase ASCII letters, digits and hyphens.
-Each entry has:
-
-Name:
-: The algorithm name, as used in the key format ({{key-format}}).
-
-Key length:
-: The length of the key material in octets.
-
-Description:
-: A brief description, including the format of the stored file.
-
-Reference:
-: The document that defines how the file is encrypted and decrypted.
-
-The designated expert checks that the specification defines the stored
-format and the key completely, and that the algorithm provides
-authenticated encryption.
-
-The initial entry is:
-
-| Name | Key length | Description | Reference |
-|---|---|---|---|
-| aes128gcm | 16 | AES-128-GCM, in the format of {{Section 2 of ECE}} | {{key-format}} of this document |
-
 # Security Considerations {#security}
 
 **Access to the file.**  Anyone who has the message can fetch the file,
@@ -740,9 +726,9 @@ message was displayed.
 
 * Added the "cid" parameter, and the HTML markup that uses it.
 
-* Added the "key" parameter, which names an encryption algorithm from
-  a new registry and gives the key, for encrypted files.  The same
-  format is used in download links.
+* Added the "key" parameter, which names an encrypting HTTP content
+  coding and gives the key, for encrypted files.  The same format is
+  used in download links.
 
 * Made "size" and "digest-sha-256" required, and took digest algorithm
   names from the HTTP Digest Fields registry.
