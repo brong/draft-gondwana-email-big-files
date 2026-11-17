@@ -274,11 +274,15 @@ key-material    = 1*( ALPHA / DIGIT / "-" / "_" )
 The algorithm name is the name of an encrypting content coding from
 the IANA "HTTP Content Coding Registry" ({{Section 16.6.1 of HTTP}}).
 A content coding defines a complete format for encrypted content, not
-just a cipher: how the content is split into records, where nonces and
-authentication tags go, and how the encryption key is derived.  A large
-file needs all of these, and the registries of cipher identifiers, such
-as the JOSE "enc" values {{JWA}} and the AEAD algorithm registry
-{{AEAD}}, don't provide them.
+just a cipher.  "aes128gcm", for example, divides the content into
+fixed-size records, each encrypted with its own nonce and carrying its
+own authentication tag, and marks the last record.  A receiver can
+therefore check each record as it arrives, rather than holding the
+whole file until a single tag at the end can be checked, and can
+detect a file that has been cut short.  A large file needs these
+properties.  The registries of cipher identifiers, such as the JOSE
+"enc" values {{JWA}} and the AEAD algorithm registry {{AEAD}}, name
+only the cipher, and would leave this document to define the rest.
 
 The same format is used in the "key" parameter and in the download link
 ({{body}}), and contains only characters that need no escaping in a URI
