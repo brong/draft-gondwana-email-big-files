@@ -167,6 +167,7 @@ url:
 
 size:
 : REQUIRED.  The size of the file in octets, after any decryption.
+  Unlike the "size" parameter of {{CONTENT-DISP}}, it is exact.
 
 digest-*:
 : REQUIRED.  A digest of the file, after any decryption.  The name
@@ -179,10 +180,22 @@ digest-*:
 filename:
 : RECOMMENDED.  As for Content-Disposition {{CONTENT-DISP}}.
 
+creation-date, modification-date, read-date:
+: OPTIONAL.  As for Content-Disposition {{CONTENT-DISP}}.
+
 type:
-: OPTIONAL.  The media type of the file, without parameters.  The
-  default is "application/octet-stream".  It overrides the Content-Type
-  of the HTTP response.
+: OPTIONAL.  The media type of the file, with any parameters, in the
+  syntax of the Content-Type header field value ({{Section 5.1 of
+  MIME}}).  The default is "application/octet-stream".  It overrides
+  the Content-Type of the HTTP response.
+
+description:
+: OPTIONAL.  A description of the file, as for Content-Description
+  ({{Section 8 of MIME}}).
+
+{:aside}
+> Open issue: Should there be a "language" parameter, as for
+> Content-Language?
 
 key:
 : OPTIONAL.  The algorithm and key used to encrypt the stored file
@@ -234,15 +247,19 @@ link-attachment = "Link-Attachment:" [CFWS] la-disposition
 la-disposition  = "attachment" / "inline" / extension-token
 
 la-parameter    = cid-param / url-param / size-param /
-                  digest-param / filename-param / type-param /
-                  key-param / expires-param / other-param
+                  digest-param / filename-param / date-param /
+                  type-param / description-param / key-param /
+                  expires-param / other-param
 
 cid-param       = "cid" "=" value      ; id-left "@" id-right
 url-param       = "url" "=" value      ; absolute "https" URI
 size-param      = "size" "=" 1*DIGIT
 digest-param    = "digest-" token "=" value   ; base64
 filename-param  = "filename" "=" value
-type-param      = "type" "=" value     ; type "/" subtype
+date-param      = ( "creation-date" / "modification-date" /
+                    "read-date" ) "=" quoted-string ; date-time
+type-param      = "type" "=" value     ; Content-Type value
+description-param = "description" "=" value
 key-param       = "key" "=" value      ; key-value
 expires-param   = "expires" "=" quoted-string ; date-time
 other-param     = attribute "=" value
@@ -257,6 +274,8 @@ removed before it is used.  This lets a long URL be folded.
 Link-Attachment: attachment;
     cid="a1.20261117T091500Z@mail.example.com";
     filename="site-survey.mp4"; type="video/mp4"; size=734003200;
+    description="Drone survey of the north site";
+    modification-date="Mon, 16 Nov 2026 17:42:10 +0000";
     url="https://files.example.com/la/
          Hq3Ld9YtW2xKq8vZp0aN5uFbE7cJr1sM";
     digest-sha-256="X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=";
@@ -501,7 +520,11 @@ description and a reference.  The initial entries are:
 | size | Size of the file in octets | {{params}} |
 | digest-* | Digest of the file | {{params}} |
 | filename | Suggested file name | {{params}} |
+| creation-date | Creation date of the file | {{params}} |
+| modification-date | Modification date of the file | {{params}} |
+| read-date | Last read date of the file | {{params}} |
 | type | Media type of the file | {{params}} |
+| description | Description of the file | {{params}} |
 | key | Encryption algorithm and key | {{params}} |
 | expires | Intended availability of the file | {{params}} |
 
@@ -582,6 +605,7 @@ was delivered, and hides the recipient's address.
 * Made "size" and "digest-sha-256" required.
 * Renamed "name" to "filename", and replaced the media type with
   "type".
+* Added "description" and the Content-Disposition date parameters.
 * Removed "permission": a linked attachment can't change.
 * Added requirements for attachment servers, receiving servers and
   message stores.
