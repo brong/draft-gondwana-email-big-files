@@ -22,6 +22,7 @@ author:
     email: alexey.melnikov@isode.com
 
 normative:
+    RATE-LIMIT: RFC6585
     MEDIA-TYPES: RFC2046
     CID: RFC2392
     ABNF: RFC5234
@@ -369,11 +370,22 @@ request to its "url".  The client:
 * MAY follow redirects, only to "https" URIs, and SHOULD limit how many;
 
 * treats any final status code other than 2xx as failure, and MAY retry
-  after a 5xx or network error, backing off between attempts; and
+  after a 429 (Too Many Requests) {{RATE-LIMIT}}, a 5xx or a network
+  error; and
 
 * SHOULD stop reading once the content is longer than "size" plus the
   encryption overhead, which for "aes128gcm" follows from the record
   size in its header.
+
+A client that retries MUST back off.  After a response with a
+Retry-After header field ({{Section 10.2.3 of HTTP}}), it MUST NOT send
+another request to that host before the time given.  Otherwise it MUST
+wait at least a minute before the first retry, at least double the wait
+after each further failure, and add random jitter.  The back-off
+applies to the host, not just the URL, so that a receiving server
+fetching many files from one attachment server slows down for all of
+them.  A client SHOULD give up after a day or so, and treat the linked
+attachment as unavailable.
 
 The client then decrypts the file if there is a "key", and checks
 "size" and each "digest-*" whose algorithm it supports.  If none is
@@ -509,8 +521,8 @@ their own copies ({{forwarding}}) avoid this for ordinary forwarding.
 Receiving servers SHOULD fetch a URL only once, and reuse the result
 for every message that names the same URL and digest, and SHOULD limit
 how fast they fetch from any one host.  Attachment servers MAY limit how
-often they serve a file, and receivers treat the refusal as a failed
-fetch ({{fetching}}).
+often they serve a file, and receivers MUST back off when they do
+({{fetching}}).
 
 **Misleading links.**  The body links might not match the header
 fields.  An MUA that hides them and shows the verified file avoids
