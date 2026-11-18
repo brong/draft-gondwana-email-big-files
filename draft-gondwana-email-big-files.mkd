@@ -129,9 +129,6 @@ receiving server:
 
 # Content-External Header Field {#header}
 
-Each Content-External header field describes an externally referenced
-attachment.
-
 The generic syntax of the Content-External header field is the same
 as that of the Content-Type header field ({{Section 5.1 of MIME}}), so
 the same generic parser can be used.  The media type is that of the
@@ -147,9 +144,8 @@ body part MUST NOT have more than one Content-External header field.
 A Content-External header field in any other body part, or in a body
 part that has more than one, MUST be ignored.
 
-A Content-External header field applies to the nearest message that
-contains its body part, which can be a message encapsulated in a
-message/rfc822 body part ({{Section 5.2.1 of MEDIA-TYPES}}).
+A linked attachment is treated as if an attached file had been placed
+where its body part is in the MIME structure.
 
 The body part's Content-ID ({{Section 7 of MIME}}), if any, identifies
 the linked attachment ({{cid-urls}}).
@@ -175,15 +171,15 @@ SIZE:
 DIGEST-\<digest-name\>:
 : REQUIRED.  A digest of the data, after any decryption.  The digest
   name is from the IANA "Hash Algorithms for HTTP Digest Fields"
-  registry {{DIGEST-FIELDS}}, and the value is base64 {{BASE64}}.
+  registry {{DIGEST-FIELDS}}, and its value is base64 {{BASE64}}.
   "DIGEST-SHA-256" MUST be present; others MAY be.  Deprecated
   algorithms MUST NOT be used.  Receivers MUST support SHA-256.
 
 STORED-DIGEST-\<digest-name\>:
 : OPTIONAL.  A digest of the data as stored at the URL, before
-  decryption, with names and values as for "DIGEST-".  It lets a system
-  without the key check the stored data.  It is only useful with
-  "KEY".
+  decryption, with names and values as for "DIGEST-".  It lets a
+  recipient check the downloaded data before decrypting it.  It is only
+  useful with "KEY".
 
 NAME:
 : RECOMMENDED.  The recommended file name of the linked attachment.
@@ -201,7 +197,8 @@ KEY:
 
 EXPIRATION:
 : OPTIONAL.  The date-time {{MAIL}} after which the existence of the
-  linked attachment is not guaranteed.
+  linked attachment is not guaranteed, as for message/external-body
+  ({{Section 5.2.3 of MEDIA-TYPES}}).
 
 ## Key Format {#key-format}
 
@@ -227,10 +224,9 @@ The sender MUST use a new random key for each file.  A file larger than
 the algorithm's P_MAX, about 64 GiB for "AEAD_AES_128_GCM", can't be
 encrypted this way.
 
-The attachment server serves the ciphertext as it is.  A receiver
-can't verify the file until it has all of it, and MUST NOT use any of
+A receiver can't verify the file until it has all of it, and MUST NOT use any of
 the plaintext before then.  A receiver that doesn't support the
-algorithm MUST treat the linked attachment as unavailable.
+algorithm treats the linked attachment as unavailable.
 
 ## Formal Syntax {#abnf}
 
@@ -342,7 +338,7 @@ example, if that body part has "Content-ID:
 An MUA resolves such a URL only to a verified copy of the file
 ({{fetching}}).  An MUA that would have to fetch the file from the
 attachment server to display it SHOULD treat it as remote content,
-under the same policy as remote images ({{security}}).
+under the same policy as remote images ({{privacy}}).
 
 MUAs that don't support this document resolve these URLs to the
 fallback body part, and will show, for example, a broken image.
@@ -359,8 +355,7 @@ encrypt it ({{key-format}}).
 
 The "URL" and the download link MUST NOT be guessable, unless the file
 is already public.  Each SHOULD contain at least 128 random bits, as a
-capability URL {{CAPABILITY-URLS}}.  Having the message then means
-having the file.
+capability URL {{CAPABILITY-URLS}}.
 
 The attachment server MUST serve GET requests for the "URL" without
 authentication, cookies or other state, and MUST always return the same
@@ -384,8 +379,8 @@ and give the new message body parts with Content-External header
 fields that point to that copy.  The Content-ID and the parameters
 other than "URL", "KEY", "STORED-DIGEST-" and "EXPIRATION" stay the
 same.
-This keeps the original attachment server from serving every later
-recipient ({{security}}), and the file from depending on it.
+This keeps the file from depending on the original attachment server
+({{security}}).
 
 When forwarding a message as a message/rfc822 body part, which can't be
 changed, the MUA SHOULD add body parts with Content-External header
@@ -435,8 +430,7 @@ is too large.  The MUA or the user can then fetch it.
 
 ## Content Scanning {#scanning}
 
-A receiving server looks for Content-External header fields in each
-body part.  It SHOULD fetch and scan each linked attachment that it
+A receiving server SHOULD fetch and scan each linked attachment that it
 would have scanned if the file had been attached, and apply the
 same policy to the result.  If fetching during the SMTP transaction
 would take too long, it MAY scan after accepting the message and before
@@ -470,8 +464,9 @@ that the user's remote image policy allows ({{cid-urls}}).
 ## Lifetime {#lifetime}
 
 A message store SHOULD keep a linked attachment as long as any message
-that refers to it, and MAY then remove it.  It can keep one copy for
-many messages, found by digest.
+that refers to it, and SHOULD remove it once no message does, as it
+would an attached file, so that it doesn't keep data the user has
+deleted.  It can keep one copy for many messages, found by digest.
 
 # Requirements and Alternatives Not Taken {#alternatives}
 
@@ -549,14 +544,14 @@ sensitive as the message, and the attachment server sees the key when
 it is used.  An attachment server could instead put the key in the
 fragment and decrypt in the browser.
 
-**Guessable URLs.**  A guessable URL lets anyone fetch the file, or
-learn that it exists and its size.
+**Guessable URLs.**  Even if the file is encrypted, a guessable URL
+reveals that it exists and its size.
 
-**Changed content.**  The digest detects a changed file.  It is only as
-trustworthy as the header field; a DKIM signature binds it to the
-signing domain.  Anyone with the key can create a valid ciphertext, so
-the authentication of the AEAD algorithm alone doesn't detect a
-replaced file.
+**Changed content.**  Whoever controls the URL can change the file
+without changing the message, and the digest detects this.  The digest
+is required even with "KEY", because every recipient has the key, and
+so does the attachment server once the download link is used, so any
+of them can make a ciphertext that decrypts correctly.
 
 **Request forgery.**  Receiving servers MUST NOT fetch from addresses
 that aren't publicly routable, such as loopback, link-local or private
@@ -583,27 +578,18 @@ this.
 
 **Scanning.**  The key is in the message, so systems that handle the
 message can decrypt the file.  Encryption protects it only from the
-attachment server and from anyone with the URL alone.
-
-**Tracking.**  If an MUA fetches a linked attachment from the
-attachment server when the user views the message or opens the file,
-the sender learns when, and from where, it happened.  An image shown
-through a "cid" URL ({{cid-urls}}) is then a "web bug"
-({{Section 9.9 of E2E-GUIDANCE}}).  So a message store SHOULD, within
-the limits of {{fetching}}, fetch all linked attachments when the
-message arrives, and store them with the message.  MUAs SHOULD get them
-from the message store, so that nothing is fetched from the attachment
-server when the user views the message or opens an attachment.  Remote
-images have the same problem, and a message store can proxy them in the
-same way.
+attachment server, unless the download link is used, and from anyone
+with the URL alone.
 
 # Privacy Considerations {#privacy}
 
-The attachment server sees each fetch.  If an MUA fetches the file when
-the message is displayed, the sender learns when and where it was read,
-as with a remote image, and per-recipient URLs show who read it.
-Fetching by the receiving server on arrival shows only that the message
-was delivered, and hides the recipient's address.
+The attachment server sees each fetch.  If an MUA fetches the file
+from it when the user views the message or opens the file, the
+sender learns when and from where, as with a remote image, and
+per-recipient URLs show who.  An image shown through a "cid" URL
+({{cid-urls}}) is then a "web bug" ({{Section 9.9 of E2E-GUIDANCE}}).
+Fetching on arrival ({{storage}}) shows only that the message was
+delivered, and hides the recipient's address.
 
 --- back
 
