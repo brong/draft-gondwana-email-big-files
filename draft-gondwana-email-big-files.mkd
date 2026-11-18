@@ -30,6 +30,7 @@ normative:
     MIME: RFC2045
     MIME-PARAM: RFC2231
     CONTENT-DISP: RFC2183
+    CONTENT-LANG: RFC3282
     URI: RFC3986
     BASE64: RFC4648
     MAIL: RFC5322
@@ -50,7 +51,6 @@ informative:
     MAIL-ARCH: RFC5598
     JMAP-MAIL: RFC8621
     BIG-FILES-00: I-D.melnikov-email-big-files
-    BLOBEXT: I-D.gondwana-jmap-blobext
     MIMI-CONTENT: I-D.ietf-mimi-content
     CAPABILITY-URLS:
         target: https://www.w3.org/TR/capability-urls/
@@ -188,6 +188,10 @@ DESCRIPTION:
 : OPTIONAL.  A description of the linked attachment, as for
   Content-Description ({{Section 8 of MIME}}).
 
+LANGUAGE:
+: OPTIONAL.  The language of the linked attachment, as for
+  Content-Language {{CONTENT-LANG}}.
+
 CREATION-DATE, MODIFICATION-DATE, READ-DATE:
 : OPTIONAL.  As for Content-Disposition {{CONTENT-DISP}}.
 
@@ -216,7 +220,9 @@ b64url          = 1*( ALPHA / DIGIT / "-" / "_" )
 
 The algorithm is named in the IANA AEAD Registry ({{Section 6 of
 AEAD}}).  The stored file is the algorithm's ciphertext output, with
-empty associated data.  Receivers MUST support "AEAD_AES_128_GCM".
+empty associated data.  The nonce has the length the algorithm
+requires, 12 octets for "AEAD_AES_128_GCM".  Receivers MUST support
+"AEAD_AES_128_GCM".
 Senders SHOULD use it unless they know every recipient supports
 another.
 
@@ -241,8 +247,9 @@ content-external = "Content-External:" [CFWS] type "/" subtype
 
 ce-parameter    = url-param / size-param / digest-param /
                   stored-digest-param / name-param /
-                  description-param / date-param / key-param /
-                  expiration-param / parameter
+                  description-param / language-param /
+                  date-param / key-param / expiration-param /
+                  parameter   ; other media type parameters
 
 url-param       = "URL" "=" value      ; absolute "https" URI
 size-param      = "SIZE" "=" 1*DIGIT
@@ -250,6 +257,7 @@ digest-param    = "DIGEST-" token "=" value   ; base64
 stored-digest-param = "STORED-DIGEST-" token "=" value   ; base64
 name-param      = "NAME" "=" value
 description-param = "DESCRIPTION" "=" value
+language-param  = "LANGUAGE" "=" value ; Content-Language value
 date-param      = ( "CREATION-DATE" / "MODIFICATION-DATE" /
                     "READ-DATE" ) "=" quoted-string ; date-time
 key-param       = "KEY" "=" value      ; key-value
@@ -277,7 +285,7 @@ Content-External: video/mp4; name="site-survey.mp4"; size=734003200;
 The body part with a Content-External header field contains a link from
 which the file can be downloaded with a web browser, with its file name
 and size.  It SHOULD be text/html {{HTML}}, with "Content-Disposition:
-inline", in a multipart/mixed with the message's other parts.  A sender
+inline", where an attached file would go.  A sender
 that knows every recipient's MUA supports this document, for example
 because they all use the same service, MAY leave the body part empty.
 
@@ -320,8 +328,10 @@ Content-External: video/mp4; name="site-survey.mp4"; ...
 --b1--
 ~~~
 
-Some MUAs show a second text/html body part as an attachment rather
-than inline, so the user only sees the link after opening it.
+{:aside}
+> Open issue: Six years ago, some MUAs showed a second text/html body
+> part as an attachment rather than inline, so the user only saw the
+> link after opening it.  Is this still the case?
 
 ## CID URLs {#cid-urls}
 
@@ -382,11 +392,8 @@ same.
 This keeps the file from depending on the original attachment server
 ({{security}}).
 
-When forwarding a message as a message/rfc822 body part, which can't be
-changed, the MUA SHOULD add body parts with Content-External header
-fields for its own copies to the outer message.  Receivers match these to the
-encapsulated message's linked attachments by digest, and a receiving
-server that has a file with the same digest needn't fetch it again.
+A message forwarded as a message/rfc822 body part keeps its linked
+attachments inside it, as it would attached files.
 
 # Receiving {#receiving}
 
@@ -449,12 +456,13 @@ applies to any lookup by digest, and to any proxy for remote content
 that the message store offers.
 
 {:aside}
-> Open issue: This is specific to each access protocol.  JMAP
-> {{JMAP-MAIL}} could list linked attachments among an Email's
-> attachments, each with a blobId; {{BLOBEXT}} already describes blobs
-> by digest.  IMAP would need a FETCH data item.  These might be
-> separate documents, along with a way for an MUA to get proxied remote
-> images.
+> Open issue: This is specific to each access protocol.  In JMAP
+> {{JMAP-MAIL}}, the EmailBodyPart for the fallback body part could
+> give the linked attachment's blobId, type, name and size, so it
+> appears among the Email's attachments like an attached file.  In
+> IMAP, BODYSTRUCTURE shows the fallback body part, so an MUA would
+> need a new FETCH data item to get the file.  These might be separate
+> documents, along with a way for an MUA to get proxied remote images.
 
 An MUA whose message store doesn't do this MAY fetch the file itself,
 when the user opens it or in the background on arrival, but SHOULD NOT
@@ -490,7 +498,9 @@ The ExternalPart of {{MIMI-CONTENT}} has much the same information for
 instant messaging.  This document uses the same encryption, AEAD
 algorithms from the AEAD Registry, and the same option of a digest of
 the stored file.  It also requires a digest of the plaintext, so that
-copies under different keys match.
+copies under different keys match.  It names digest algorithms from the
+HTTP Digest registry rather than the Named Information registry; both
+have SHA-256.
 
 # IANA Considerations {#iana}
 
@@ -528,6 +538,7 @@ description and a reference.  The initial entries are:
 | STORED-DIGEST-* | Digest of the stored data | {{params}} |
 | NAME | Recommended file name | {{params}} |
 | DESCRIPTION | Description of the data | {{params}} |
+| LANGUAGE | Language of the data | {{params}} |
 | CREATION-DATE | Creation date of the file | {{params}} |
 | MODIFICATION-DATE | Modification date of the file | {{params}} |
 | READ-DATE | Last read date of the file | {{params}} |
@@ -588,8 +599,9 @@ from it when the user views the message or opens the file, the
 sender learns when and from where, as with a remote image, and
 per-recipient URLs show who.  An image shown through a "cid" URL
 ({{cid-urls}}) is then a "web bug" ({{Section 9.9 of E2E-GUIDANCE}}).
-Fetching on arrival ({{storage}}) shows only that the message was
-delivered, and hides the recipient's address.
+If the message store fetches it on arrival and MUAs get it from there
+({{storage}}), the attachment server learns only that the message was
+delivered, and not the recipient's address.
 
 --- back
 
@@ -598,7 +610,7 @@ delivered, and hides the recipient's address.
 
 * Allowed only one Content-External header field per body part, and
   used the body part's Content-ID to refer to the linked attachment.
-* Added "KEY", "STORED-DIGEST-", "DESCRIPTION" and the
+* Added "KEY", "STORED-DIGEST-", "DESCRIPTION", "LANGUAGE" and the
   Content-Disposition date parameters.
 * Made "SIZE" and "DIGEST-SHA-256" required, and required "https"
   URLs.
