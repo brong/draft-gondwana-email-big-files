@@ -1,7 +1,7 @@
 ---
 title: Linked Attachments in Email Messages
 abbrev: Linked Attachments
-docname: draft-gondwana-email-big-files-00
+docname: draft-gondwana-email-big-files-01
 submissionType: IETF
 category: std
 ipr: trust200902
@@ -52,6 +52,19 @@ informative:
     JMAP-MAIL: RFC8621
     BIG-FILES-00: I-D.melnikov-email-big-files
     MIMI-CONTENT: I-D.ietf-mimi-content
+    REFERRER-POLICY:
+        target: https://www.w3.org/TR/referrer-policy/
+        title: Referrer Policy
+        author:
+          -
+            ins: J. Eisinger
+            name: Jochen Eisinger
+          -
+            ins: E. Stark
+            name: Emily Stark
+        date: 2017-01-26
+        seriesinfo:
+            W3C: Candidate Recommendation
     CAPABILITY-URLS:
         target: https://www.w3.org/TR/capability-urls/
         title: Good Practices for Capability URLs
@@ -236,32 +249,40 @@ algorithm treats the linked attachment as unavailable.
 
 ## Formal Syntax {#abnf}
 
-This uses ABNF {{ABNF}}.  "type", "subtype", "parameter", "token" and
-"value" are from {{MIME}}; CFWS, quoted-string and date-time are from
-{{MAIL}}.  All alphabetic characters outside quoted strings are
-case-insensitive.
+This uses ABNF {{ABNF}}.  "type", "subtype", "attribute", "token" and
+"value" are from {{MIME}}; FWS, quoted-string and date-time are from
+{{MAIL}}.
 
 ~~~ abnf
-content-external = "Content-External:" [CFWS] type "/" subtype
-                   *([CFWS] ";" [CFWS] ce-parameter) [CFWS] CRLF
+content-external = "Content-External:" [FWS] type "/" subtype
+                   *([FWS] ";" [FWS] ce-parameter) [FWS] CRLF
 
 ce-parameter    = url-param / size-param / digest-param /
                   stored-digest-param / name-param /
                   description-param / language-param /
                   date-param / key-param / expiration-param /
-                  parameter   ; other media type parameters
+                  other-param ; other media type parameters
 
-url-param       = "URL" "=" value      ; absolute "https" URI
-size-param      = "SIZE" "=" 1*DIGIT
-digest-param    = "DIGEST-" token "=" value   ; base64
-stored-digest-param = "STORED-DIGEST-" token "=" value   ; base64
-name-param      = "NAME" "=" value
-description-param = "DESCRIPTION" "=" value
-language-param  = "LANGUAGE" "=" value ; Content-Language value
+url-param       = "URL" [FWS] "=" [FWS] value
+                  ; absolute "https" URI
+size-param      = "SIZE" [FWS] "=" [FWS] 1*DIGIT
+digest-param    = "DIGEST-" token [FWS] "=" [FWS] value
+                  ; base64
+stored-digest-param = "STORED-DIGEST-" token [FWS] "=" [FWS] value
+                  ; base64
+name-param      = "NAME" [FWS] "=" [FWS] value
+description-param = "DESCRIPTION" [FWS] "=" [FWS] value
+language-param  = "LANGUAGE" [FWS] "=" [FWS] value
+                  ; Content-Language value
 date-param      = ( "CREATION-DATE" / "MODIFICATION-DATE" /
-                    "READ-DATE" ) "=" quoted-string ; date-time
-key-param       = "KEY" "=" value      ; key-value
-expiration-param = "EXPIRATION" "=" quoted-string ; date-time
+                    "READ-DATE" ) [FWS] "=" [FWS] quoted-string
+                  ; date-time
+key-param       = "KEY" [FWS] "=" [FWS] value
+                  ; key-value
+expiration-param = "EXPIRATION" [FWS] "=" [FWS] quoted-string
+                  ; date-time
+other-param     = attribute [FWS] "=" [FWS] value
+
 ~~~
 
 A URL can't contain whitespace, so whitespace in the value of "URL" is
@@ -371,7 +392,7 @@ The attachment server MUST serve GET requests for the "URL" without
 authentication, cookies or other state, and MUST always return the same
 content for it.  It SHOULD keep the file until "EXPIRATION", if given, and
 for at least several days in any case.  Its download pages SHOULD send
-"Referrer-Policy: no-referrer".
+"Referrer-Policy: no-referrer" {{REFERRER-POLICY}}.
 
 ## Composing {#composing}
 
@@ -491,8 +512,10 @@ and it has no digest or key.
 
 {{BIG-FILES-00}} asked whether the field should also be allowed in the
 header section of a message.  This document doesn't allow it, so that
-the field always has a fallback, and stays with its body part when the
-message is forwarded or restructured ({{Section 5.1 of MEDIA-TYPES}}).
+the field always has a fallback.  The field's name starts with
+"Content-" because only such fields have a defined meaning in body
+parts, and gateways may discard others ({{Section 5.1 of
+MEDIA-TYPES}}).
 
 The ExternalPart of {{MIMI-CONTENT}} has much the same information for
 instant messaging.  This document uses the same encryption, AEAD
@@ -598,12 +621,18 @@ The attachment server sees each fetch.  If an MUA fetches the file
 from it when the user views the message or opens the file, the
 sender learns when and from where, as with a remote image, and
 per-recipient URLs show who.  An image shown through a "cid" URL
-({{cid-urls}}) is then a "web bug" ({{Section 9.9 of E2E-GUIDANCE}}).
+({{cid-urls}}) is then a "web bug" ({{Section 9.7.3 of E2E-GUIDANCE}}).
 If the message store fetches it on arrival and MUAs get it from there
 ({{storage}}), the attachment server learns only that the message was
 delivered, and not the recipient's address.
 
 --- back
+
+# Changes from draft-gondwana-email-big-files-00
+{:numbered="false"}
+
+* Used FWS instead of CFWS in the Content-External syntax, and allowed
+  FWS around "=" in parameters.
 
 # Changes from draft-melnikov-email-big-files-00 {#changes}
 {:numbered="false"}
