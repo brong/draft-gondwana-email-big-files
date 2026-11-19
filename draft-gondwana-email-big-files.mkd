@@ -286,7 +286,9 @@ other-param     = attribute [FWS] "=" [FWS] value
 ~~~
 
 A URL can't contain whitespace, so whitespace in the value of "URL" is
-removed before it is used.  This lets a long URL be folded.
+removed before it is used.  This lets a long URL be folded.  Senders
+SHOULD fold a long URL this way rather than split it with
+{{MIME-PARAM}} continuations, which some receivers don't handle.
 
 ## Example {#example-header}
 
@@ -322,7 +324,9 @@ as one can hide it.
 
 MUAs that support this document SHOULD hide body parts with a
 Content-External header field, and show the linked attachment instead.
-They MUST NOT hide one unless they have a verified copy of the file.
+They MUST NOT hide one unless they offer the user a way to download
+the file.  The file can be fetched and verified ({{fetching}}) on
+arrival or when the user opens it.
 
 The example uses the line wrapping of {{WRAP}}:
 
@@ -633,6 +637,10 @@ delivered, and not the recipient's address.
 
 * Used FWS instead of CFWS in the Content-External syntax, and allowed
   FWS around "=" in parameters.
+* Let an MUA hide the fallback body part before verifying the file, if
+  it offers a way to download it.
+* Recommended folding a long URL at whitespace rather than with
+  RFC 2231 continuations.
 
 # Changes from draft-melnikov-email-big-files-00 {#changes}
 {:numbered="false"}
